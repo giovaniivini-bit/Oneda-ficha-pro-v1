@@ -374,6 +374,13 @@ function renderListView() {
     listProducts.forEach((product) => {
         const row = document.createElement('div');
         row.className = 'table-list-row';
+
+        // Aplicar tamanho atual do slider diretamente (inline style tem prioridade)
+        const thumbW = parseInt(localStorage.getItem('oneda_list_thumb_size') || '120', 10);
+        const thumbH = Math.round(thumbW * 0.75);
+        const gridCols = `${thumbW + 16}px 1.3fr 2.3fr 1fr 1.2fr`;
+        row.style.gridTemplateColumns = gridCols;
+
         const imgUrl = getProductImageUrl(product.produto);
         const cost = product.precoPrincipal || 0;
 
@@ -402,7 +409,7 @@ function renderListView() {
         }
 
         row.innerHTML = `
-            <div class="row-thumb-box">
+            <div class="row-thumb-box" style="width:${thumbW}px;height:${thumbH}px;min-width:${thumbW}px;">
                 <img src="${imgUrl}" alt="${product.produto}" class="row-thumb-img" loading="lazy" onerror="handleThumbImgError(this)">
             </div>
             <div class="row-sku-text">${escapeHTML(product.produto)}</div>
@@ -423,6 +430,11 @@ function renderListView() {
 
         tableBody.appendChild(row);
     });
+
+    // Sincronizar tamanho do header com o slider atual após render
+    const currentThumbW = parseInt(localStorage.getItem('oneda_list_thumb_size') || '120', 10);
+    const headerEl = document.querySelector('.products-table-header');
+    if (headerEl) headerEl.style.gridTemplateColumns = `${currentThumbW + 16}px 1.3fr 2.3fr 1fr 1.2fr`;
 }
 
 /**
@@ -1154,21 +1166,27 @@ function setupImageSizeControl() {
 function applyImageSize(widthPx) {
     const w = parseInt(widthPx, 10) || 120;
     const h = Math.round(w * 0.75); // Proporção 4:3
+
+    // 1) Atualizar variáveis CSS globais (para novas rows geradas depois)
     document.documentElement.style.setProperty('--list-thumb-width', `${w}px`);
     document.documentElement.style.setProperty('--list-thumb-height', `${h}px`);
-    
-    let styleTag = document.getElementById('dynamic-list-styles');
-    if (!styleTag) {
-        styleTag = document.createElement('style');
-        styleTag.id = 'dynamic-list-styles';
-        document.head.appendChild(styleTag);
-    }
-    styleTag.innerHTML = `
-        .products-table-header, .table-list-row {
-            grid-template-columns: ${w + 16}px 1.3fr 2.3fr 1fr 1.2fr !important;
-        }
-    `;
 
+    // 2) Aplicar inline style diretamente em todos os elementos existentes
+    //    (inline style tem prioridade sobre qualquer regra CSS estática)
+    const gridCols = `${w + 16}px 1.3fr 2.3fr 1fr 1.2fr`;
+    const header = document.querySelector('.products-table-header');
+    if (header) header.style.gridTemplateColumns = gridCols;
+
+    document.querySelectorAll('.table-list-row').forEach(row => {
+        row.style.gridTemplateColumns = gridCols;
+    });
+
+    document.querySelectorAll('.row-thumb-box').forEach(box => {
+        box.style.width = `${w}px`;
+        box.style.height = `${h}px`;
+    });
+
+    // 3) Atualizar label
     const sizeLabel = document.getElementById('imgSizeValLabel');
     if (sizeLabel) sizeLabel.textContent = `${w}px`;
 }
@@ -1194,20 +1212,18 @@ window.executePrint = executePrint;
 
 function executePrint(mode) {
     closePrintModal();
-    const printArea = document.getElementById('printArea');
-    if (!printArea) return;
+
+    if (mode === 'list') {
+        openPrintWindow_List();
+        return;
+    }
 
     let productsToPrint = [];
     if (mode === 'current') {
         const current = state.filteredProducts[state.currentIndex];
         if (current) productsToPrint = [current];
     } else if (mode === 'room') {
-        // Imprime todos os produtos da sala selecionada (ou lista filtrada)
         productsToPrint = [...state.filteredProducts];
-    } else if (mode === 'list') {
-        // Abre a impressão direta da página no modo tabela
-        setTimeout(() => { window.print(); }, 200);
-        return;
     }
 
     if (productsToPrint.length === 0) {
@@ -1215,82 +1231,173 @@ function executePrint(mode) {
         return;
     }
 
-    // Gera o HTML de 1 folha A4 para cada produto
-    let html = '';
+    openPrintWindow_Sheets(productsToPrint);
+}
+
+/**
+ * Abre nova janela de impressão com fichas 1 por página (A4 portrait)
+ */
+function openPrintWindow_Sheets(productsToPrint) {
+    const markupVal = state.listSimulateMarkup !== 'none' ? parseFloat(state.listSimulateMarkup) : 2.5;
+    const dateStr = new Date().toLocaleDateString('pt-BR');
+    const total = productsToPrint.length;
+
+    let sheetsHTML = '';
     productsToPrint.forEach((p, idx) => {
         const imgUrl = getProductImageUrl(p.produto);
-        const markupVal = state.listSimulateMarkup !== 'none' ? parseFloat(state.listSimulateMarkup) : (p.markup || 2.5);
-        const pdvVal = p.pdvSugerido || (p.precoPrincipal * markupVal);
+        const pdvVal = p.precoPrincipal * markupVal;
 
         let varsHTML = '';
         if (p.variacoes && p.variacoes.length > 0) {
-            varsHTML = `
-                <div class="print-vars-box">
-                    <div class="print-vars-title">Opções / Variações do Produto</div>
-                    <table class="print-vars-table">
-                        ${p.variacoes.map((v, vIdx) => `
-                            <tr>
-                                <td><strong>Variação ${vIdx + 1}:</strong> ${escapeHTML(v.nome)}</td>
-                                <td>${v.precoFormatted || formatCurrency(v.preco)}</td>
-                            </tr>
-                        `).join('')}
-                    </table>
-                </div>
-            `;
+            varsHTML = `<div class="vars-box"><div class="vars-title">Opções / Variações</div><table class="vars-table">${
+                p.variacoes.map((v, vIdx) => `<tr><td><b>Var. ${vIdx+1}:</b> ${escapeHTML(v.nome)}</td><td>${v.precoFormatted||formatCurrency(v.preco)}</td></tr>`).join('')
+            }</table></div>`;
         }
 
-        html += `
-            <div class="print-page-sheet">
-                <div class="print-sheet-header">
-                    <div class="print-sheet-brand">ONEDA <span>FICHA PRO</span></div>
-                    <div class="print-sheet-room">${escapeHTML(p.sala || 'MOSTRUÁRIO')}</div>
-                </div>
-
-                <div class="print-sheet-body">
-                    <div class="print-photo-col">
-                        <img src="${imgUrl}" alt="${p.produto}">
+        sheetsHTML += `<div class="page-sheet">
+            <div class="sheet-header">
+                <div class="sheet-brand">ONEDA <span>FICHA PRO</span></div>
+                <div class="sheet-room">${escapeHTML(p.sala||'MOSTRUÁRIO')}</div>
+            </div>
+            <div class="sheet-body">
+                <div class="photo-col"><img src="${imgUrl}" alt="${escapeHTML(p.produto)}"></div>
+                <div class="info-col">
+                    <div class="meta-box">
+                        <div class="meta-sku">${escapeHTML(p.produto)}</div>
+                        <div class="meta-desc">${escapeHTML(p.descricao||'')}</div>
                     </div>
-
-                    <div class="print-info-col">
-                        <div class="print-meta-box">
-                            <div class="print-meta-sku">${escapeHTML(p.produto)}</div>
-                            <div class="print-meta-desc">${escapeHTML(p.descricao || '')}</div>
+                    <div class="prices-box">
+                        <div class="price-col">
+                            <span class="price-lbl">Custo Principal</span>
+                            <span class="cost-num">${p.precoPrincipalFormatted||formatCurrency(p.precoPrincipal)}</span>
                         </div>
-
-                        <div class="print-prices-box">
-                            <div class="print-price-col">
-                                <span class="print-price-lbl">Custo Principal</span>
-                                <span class="print-cost-num">${p.precoPrincipalFormatted || formatCurrency(p.precoPrincipal)}</span>
-                            </div>
-                            <div class="print-price-col">
-                                <span class="print-price-lbl">PDV Sugerido (${markupVal}x)</span>
-                                <span class="print-pdv-num">${formatCurrency(pdvVal)}</span>
-                            </div>
-                        </div>
-
-                        ${varsHTML}
-
-                        <div class="print-obs-sheet">
-                            <div class="print-obs-lbl">Observações Técnicas:</div>
-                            <div class="print-obs-val">${escapeHTML(p.obs || 'Nenhuma observação informada.')}</div>
+                        <div class="price-col">
+                            <span class="price-lbl">PDV Sugerido (${markupVal}x)</span>
+                            <span class="pdv-num">${formatCurrency(pdvVal)}</span>
                         </div>
                     </div>
-                </div>
-
-                <div class="print-sheet-footer">
-                    <span>Catálogo Comercial Oficial • Oneda Ficha Pro</span>
-                    <span>Folha ${idx + 1} de ${productsToPrint.length} • Sala: ${escapeHTML(p.sala || 'Geral')} • Gerado em ${new Date().toLocaleDateString('pt-BR')}</span>
+                    ${varsHTML}
+                    <div class="obs-box">
+                        <div class="obs-lbl">Observações Técnicas:</div>
+                        <div class="obs-val">${escapeHTML(p.obs||'Nenhuma observação informada.')}</div>
+                    </div>
                 </div>
             </div>
-        `;
+            <div class="sheet-footer">
+                <span>Catálogo Comercial • Oneda Ficha Pro</span>
+                <span>Folha ${idx+1} de ${total} • ${escapeHTML(p.sala||'Geral')} • ${dateStr}</span>
+            </div>
+        </div>`;
     });
 
-    printArea.innerHTML = html;
+    const printDoc = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Impressão — Oneda Ficha Pro</title>
+<style>
+@page{size:A4 portrait;margin:10mm}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Helvetica Neue',Arial,sans-serif;background:#fff;color:#0f172a}
+.page-sheet{width:100%;min-height:270mm;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always;break-after:page;padding:6mm 0}
+.page-sheet:last-child{page-break-after:auto;break-after:auto}
+.sheet-header{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f172a;padding-bottom:8px;margin-bottom:14px}
+.sheet-brand{font-size:22px;font-weight:900;letter-spacing:.5px}
+.sheet-brand span{color:#0ea5e9}
+.sheet-room{font-size:11px;font-weight:800;padding:3px 10px;border:1.5px solid #0f172a;border-radius:5px;text-transform:uppercase}
+.sheet-body{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;flex:1;align-items:stretch}
+.photo-col{display:flex;align-items:center;justify-content:center;border:1px solid #e2e8f0;border-radius:8px;padding:10px;background:#fff;overflow:hidden}
+.photo-col img{max-width:100%;max-height:420px;object-fit:contain}
+.info-col{display:flex;flex-direction:column;gap:12px}
+.meta-box{border-bottom:1px solid #e2e8f0;padding-bottom:10px}
+.meta-sku{font-size:20px;font-weight:900}
+.meta-desc{font-size:13px;color:#475569;margin-top:4px}
+.prices-box{display:flex;gap:14px}
+.price-col{flex:1;background:#f8fafc;border-radius:8px;padding:10px 12px}
+.price-lbl{font-size:10px;font-weight:700;text-transform:uppercase;color:#64748b;display:block;margin-bottom:4px}
+.cost-num{font-size:20px;font-weight:900;color:#0f172a}
+.pdv-num{font-size:20px;font-weight:900;color:#0ea5e9}
+.vars-box{margin-top:2px}
+.vars-title{font-size:10px;font-weight:800;text-transform:uppercase;color:#64748b;margin-bottom:6px}
+.vars-table{width:100%;border-collapse:collapse;font-size:12px}
+.vars-table td{padding:5px 8px;border:1px solid #e2e8f0}
+.obs-box{margin-top:auto;padding-top:8px;border-top:1px solid #e2e8f0}
+.obs-lbl{font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:4px}
+.obs-val{font-size:12px;color:#475569}
+.sheet-footer{display:flex;justify-content:space-between;font-size:9px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:8px;margin-top:10px}
+</style></head><body>
+${sheetsHTML}
+<script>window.onload=function(){window.print();setTimeout(function(){window.close();},2000);};<\/script>
+</body></html>`;
 
-    // Dispara a janela de impressão nativa
-    setTimeout(() => {
-        window.print();
-    }, 300);
+    const pw = window.open('', '_blank', 'width=900,height=700');
+    if (!pw) { alert('Bloqueador de pop-up ativo! Permita pop-ups para este site nas configurações do navegador.'); return; }
+    pw.document.open();
+    pw.document.write(printDoc);
+    pw.document.close();
+}
+
+/**
+ * Abre nova janela de impressão com lista/tabela resumida (A4 landscape)
+ */
+function openPrintWindow_List() {
+    const markupVal = state.listSimulateMarkup !== 'none' ? parseFloat(state.listSimulateMarkup) : null;
+    const dateStr = new Date().toLocaleDateString('pt-BR');
+    let listProducts = [...state.filteredProducts];
+    if (state.listFilterSala !== 'ALL') {
+        listProducts = listProducts.filter(p => p.sala === state.listFilterSala);
+    }
+    if (listProducts.length === 0) { alert('Nenhum produto na lista atual!'); return; }
+
+    const baseCost = listProducts[0]?.precoPrincipal || 0;
+    const colHeader = markupVal ? `PDV (${markupVal}x)` : 'DIFERENÇA BASE';
+    const salaLabel = state.listFilterSala === 'ALL' ? 'Todas as Salas' : state.listFilterSala;
+
+    const rowsHTML = listProducts.map((p, idx) => {
+        const imgUrl = getProductImageUrl(p.produto);
+        let diffCell = '';
+        if (markupVal) {
+            diffCell = `<b>${formatCurrency(p.precoPrincipal * markupVal)}</b>`;
+        } else {
+            const diff = p.precoPrincipal - baseCost;
+            diffCell = Math.abs(diff) < 0.01 ? 'R$ 0,00' : (diff > 0 ? `+${formatCurrency(diff)}` : `-${formatCurrency(Math.abs(diff))}`);
+        }
+        return `<tr>
+            <td style="text-align:center;color:#64748b">${idx+1}</td>
+            <td style="text-align:center"><img src="${imgUrl}" style="width:55px;height:42px;object-fit:contain;border:1px solid #e2e8f0;border-radius:4px"></td>
+            <td><b>${escapeHTML(p.produto)}</b></td>
+            <td style="color:#475569">${escapeHTML(p.descricao||'—')}</td>
+            <td style="text-align:right;font-weight:700">${p.precoPrincipalFormatted||formatCurrency(p.precoPrincipal)}</td>
+            <td style="text-align:right;font-weight:700;color:#0ea5e9">${diffCell}</td>
+        </tr>`;
+    }).join('');
+
+    const printDoc = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Lista — Oneda Ficha Pro</title>
+<style>
+@page{size:A4 landscape;margin:10mm}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;color:#0f172a}
+h1{font-size:18px;font-weight:900;margin-bottom:4px}
+.subtitle{font-size:10px;color:#64748b;margin-bottom:14px}
+table{width:100%;border-collapse:collapse}
+th{background:#0f172a;color:#fff;padding:7px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;text-align:left}
+td{padding:6px 10px;border-bottom:1px solid #e2e8f0;vertical-align:middle}
+tr:nth-child(even) td{background:#f8fafc}
+.footer{margin-top:14px;font-size:9px;color:#94a3b8;text-align:right}
+</style></head><body>
+<h1>ONEDA <span style="color:#0ea5e9">FICHA PRO</span> — Lista de Produtos</h1>
+<div class="subtitle">Sala: ${escapeHTML(salaLabel)} • ${markupVal?`Markup ${markupVal}x`:'Sem Markup'} • ${listProducts.length} produtos • ${dateStr}</div>
+<table>
+<thead><tr><th>#</th><th>FOTO</th><th>PRODUTO</th><th>DESCRIÇÃO</th><th style="text-align:right">CUSTO</th><th style="text-align:right">${colHeader}</th></tr></thead>
+<tbody>${rowsHTML}</tbody>
+</table>
+<div class="footer">Catálogo Comercial Oficial • Oneda Ficha Pro • ${dateStr}</div>
+<script>window.onload=function(){window.print();setTimeout(function(){window.close();},2000);};<\/script>
+</body></html>`;
+
+    const pw = window.open('', '_blank', 'width=900,height=700');
+    if (!pw) { alert('Bloqueador de pop-up ativo! Permita pop-ups para este site nas configurações do navegador.'); return; }
+    pw.document.open();
+    pw.document.write(printDoc);
+    pw.document.close();
 }
 
 /**
