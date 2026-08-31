@@ -603,36 +603,44 @@ function prevProduct() {
  * ==========================================================================
  */
 function setupEventListeners() {
+    function safeAdd(id, event, handler) {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener(event, handler);
+        return el;
+    }
+
     // Tela 1: Seleção de Opções de Apresentação (Lista vs 1 por Folha)
     const optList = document.getElementById('optCardList');
     const optShowcase = document.getElementById('optCardShowcase');
 
-    optList.addEventListener('click', () => {
-        state.currentView = 'list';
-        optList.classList.add('active');
-        optShowcase.classList.remove('active');
-    });
+    if (optList && optShowcase) {
+        optList.addEventListener('click', () => {
+            state.currentView = 'list';
+            optList.classList.add('active');
+            optShowcase.classList.remove('active');
+        });
 
-    optShowcase.addEventListener('click', () => {
-        state.currentView = 'showcase';
-        optShowcase.classList.add('active');
-        optList.classList.remove('active');
-    });
+        optShowcase.addEventListener('click', () => {
+            state.currentView = 'showcase';
+            optShowcase.classList.add('active');
+            optList.classList.remove('active');
+        });
+    }
 
     // Tela 1: Botão Todas / Limpar Salas
-    document.getElementById('btnWelcomeAllRooms').addEventListener('click', () => {
+    safeAdd('btnWelcomeAllRooms', 'click', () => {
         state.availableRooms.forEach(r => state.selectedRooms.add(r));
         applyFilters();
         renderWelcomeRooms();
     });
-    document.getElementById('btnWelcomeClearRooms').addEventListener('click', () => {
+    safeAdd('btnWelcomeClearRooms', 'click', () => {
         state.selectedRooms.clear();
         applyFilters();
         renderWelcomeRooms();
     });
 
     // Tela 1 -> Tela 2: INICIAR APRESENTAÇÃO
-    document.getElementById('btnStartPresentation').addEventListener('click', () => {
+    safeAdd('btnStartPresentation', 'click', () => {
         if (state.filteredProducts.length === 0) {
             alert('Por favor, selecione pelo menos uma sala com produtos para iniciar!');
             return;
@@ -642,21 +650,21 @@ function setupEventListeners() {
     });
 
     // Tela 2 -> Tela 1: VOLTAR AOS FILTROS
-    document.getElementById('btnBackToWelcome').addEventListener('click', () => {
+    safeAdd('btnBackToWelcome', 'click', () => {
         state.currentScreen = 'welcome';
         updateScreenVisibility();
     });
-    document.getElementById('btnEmptyGoBack')?.addEventListener('click', () => {
+    safeAdd('btnEmptyGoBack', 'click', () => {
         state.currentScreen = 'welcome';
         updateScreenVisibility();
     });
 
     // Tela 2: Toggle Rápido Lista / 1 por Folha
-    document.getElementById('btnToggleList').addEventListener('click', () => {
+    safeAdd('btnToggleList', 'click', () => {
         state.currentView = 'list';
         renderPresentationScreen();
     });
-    document.getElementById('btnToggleShowcase').addEventListener('click', () => {
+    safeAdd('btnToggleShowcase', 'click', () => {
         state.currentView = 'showcase';
         renderPresentationScreen();
     });
@@ -687,48 +695,54 @@ function setupEventListeners() {
     }
 
     // Tela 2: Navegação Vertical (Setas Cima ↑ / Baixo ↓)
-    document.getElementById('btnPrevProductUp').addEventListener('click', prevProduct);
-    document.getElementById('btnNextProductDown').addEventListener('click', nextProduct);
+    safeAdd('btnPrevProductUp', 'click', prevProduct);
+    safeAdd('btnNextProductDown', 'click', nextProduct);
 
     // Barra de Busca da Tela 2
     const searchInput = document.getElementById('searchInput');
     const clearSearchBtn = document.getElementById('btnClearSearch');
-    searchInput.addEventListener('input', (e) => {
-        state.searchQuery = e.target.value;
-        clearSearchBtn.style.display = state.searchQuery ? 'block' : 'none';
-        applyFilters();
-        renderPresentationScreen();
-    });
-    clearSearchBtn.addEventListener('click', () => {
-        searchInput.value = '';
-        state.searchQuery = '';
-        clearSearchBtn.style.display = 'none';
-        applyFilters();
-        renderPresentationScreen();
-        searchInput.focus();
-    });
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            state.searchQuery = e.target.value;
+            if (clearSearchBtn) clearSearchBtn.style.display = state.searchQuery ? 'block' : 'none';
+            applyFilters();
+            renderPresentationScreen();
+        });
+    }
+    if (clearSearchBtn && searchInput) {
+        clearSearchBtn.addEventListener('click', () => {
+            searchInput.value = '';
+            state.searchQuery = '';
+            clearSearchBtn.style.display = 'none';
+            applyFilters();
+            renderPresentationScreen();
+            searchInput.focus();
+        });
+    }
 
     // Toggle Barra Inferior
-    document.getElementById('stripHandle').addEventListener('click', () => {
+    safeAdd('stripHandle', 'click', () => {
         const track = document.getElementById('stripTrack');
         const icon = document.getElementById('stripHandleIcon');
-        if (track.style.display === 'none') {
-            track.style.display = 'flex';
-            icon.className = 'fa-solid fa-chevron-up';
-        } else {
-            track.style.display = 'none';
-            icon.className = 'fa-solid fa-chevron-down';
+        if (track) {
+            if (track.style.display === 'none') {
+                track.style.display = 'flex';
+                if (icon) icon.className = 'fa-solid fa-chevron-up';
+            } else {
+                track.style.display = 'none';
+                if (icon) icon.className = 'fa-solid fa-chevron-down';
+            }
         }
     });
 
     // Fullscreen Toggle
-    document.getElementById('btnToggleFullscreen').addEventListener('click', toggleFullscreen);
+    safeAdd('btnToggleFullscreen', 'click', toggleFullscreen);
 
     // Zoom Image Modal
-    document.getElementById('btnZoomImage').addEventListener('click', openImageZoom);
-    document.getElementById('showcaseProductImg').addEventListener('click', openImageZoom);
-    document.getElementById('btnCloseZoom').addEventListener('click', closeImageZoom);
-    document.getElementById('imageZoomModal').addEventListener('click', (e) => {
+    safeAdd('btnZoomImage', 'click', openImageZoom);
+    safeAdd('showcaseProductImg', 'click', openImageZoom);
+    safeAdd('btnCloseZoom', 'click', closeImageZoom);
+    safeAdd('imageZoomModal', 'click', (e) => {
         if (e.target.id === 'imageZoomModal') closeImageZoom();
     });
 
@@ -779,36 +793,34 @@ function setupEventListeners() {
     }
 
     // Modal Quick Search (Ctrl + K)
-    document.getElementById('btnCloseQuickSearch').addEventListener('click', closeQuickSearchModal);
-    document.getElementById('quickSearchModal').addEventListener('click', (e) => {
+    safeAdd('btnCloseQuickSearch', 'click', closeQuickSearchModal);
+    safeAdd('quickSearchModal', 'click', (e) => {
         if (e.target.id === 'quickSearchModal') closeQuickSearchModal();
     });
     const modalInput = document.getElementById('modalSearchInput');
-    modalInput.addEventListener('input', (e) => renderQuickSearchResults(e.target.value));
+    if (modalInput) {
+        modalInput.addEventListener('input', (e) => renderQuickSearchResults(e.target.value));
+    }
 
     // Controle de Tamanho de Imagem na Lista
     setupImageSizeControl();
 
     // Modal de Impressão / PDF
-    const btnOpenPrint = document.getElementById('btnOpenPrintModal');
-    if (btnOpenPrint) btnOpenPrint.addEventListener('click', openPrintModal);
-    const btnClosePrint = document.getElementById('btnClosePrintModal');
-    if (btnClosePrint) btnClosePrint.addEventListener('click', closePrintModal);
-    const printModal = document.getElementById('printModal');
-    if (printModal) {
-        printModal.addEventListener('click', (e) => {
-            if (e.target.id === 'printModal') closePrintModal();
-        });
-    }
+    safeAdd('btnOpenPrintModal', 'click', openPrintModal);
+    safeAdd('btnClosePrintModal', 'click', closePrintModal);
+    safeAdd('printModal', 'click', (e) => {
+        if (e.target.id === 'printModal') closePrintModal();
+    });
 
     // Modal de Edição de Ficha (Lápis Verde)
-    document.getElementById('btnOpenEditProduct').addEventListener('click', openEditProductModal);
-    document.getElementById('btnCloseEditModal').addEventListener('click', closeEditProductModal);
-    document.getElementById('btnCancelEdit').addEventListener('click', closeEditProductModal);
-    document.getElementById('editProductModal').addEventListener('click', (e) => {
+    safeAdd('btnOpenEditProduct', 'click', openEditProductModal);
+    safeAdd('btnCloseEditModal', 'click', closeEditProductModal);
+    safeAdd('btnCancelEdit', 'click', closeEditProductModal);
+    safeAdd('editProductModal', 'click', (e) => {
         if (e.target.id === 'editProductModal') closeEditProductModal();
     });
-    document.getElementById('editProductForm').addEventListener('submit', handleSaveEditProduct);
+    safeAdd('editProductForm', 'submit', handleSaveEditProduct);
+    safeAdd('btnSaveEdit', 'click', handleSaveEditProduct);
 
     // NAVEGAÇÃO GLOBAL POR TECLADO
     window.addEventListener('keydown', (e) => {
@@ -823,9 +835,9 @@ function setupEventListeners() {
         if (e.key === 'Escape') {
             const zoomModal = document.getElementById('imageZoomModal');
             const searchModal = document.getElementById('quickSearchModal');
-            if (zoomModal.style.display !== 'none') {
+            if (zoomModal && zoomModal.style.display !== 'none') {
                 closeImageZoom();
-            } else if (searchModal.style.display !== 'none') {
+            } else if (searchModal && searchModal.style.display !== 'none') {
                 closeQuickSearchModal();
             } else if (state.currentScreen === 'presentation') {
                 state.currentScreen = 'welcome';
@@ -834,7 +846,7 @@ function setupEventListeners() {
             return;
         }
 
-        if (document.activeElement.tagName === 'INPUT') return;
+        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
 
         // Se estiver no modo 1 por folha na Tela 2:
         if (state.currentScreen === 'presentation' && state.currentView === 'showcase') {
@@ -953,27 +965,30 @@ window.closeEditProductModal = closeEditProductModal;
 window.handleSaveEditProduct = handleSaveEditProduct;
 
 async function handleSaveEditProduct(e) {
-    e.preventDefault();
+    if (e) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    }
     const product = state.filteredProducts[state.currentIndex];
     if (!product) return;
 
-    const sku = document.getElementById('editProductSku').value.trim();
+    const sku = (document.getElementById('editProductSku')?.value || '').trim();
     const descField = document.getElementById('editProductDesc');
     const descText = descField ? descField.value.trim() : (product.descricao || '');
 
-    const custoNum = parseCurrency(document.getElementById('editCustoPrincipal').value);
-    const markupNum = parseFloat(document.getElementById('editMarkup').value.replace(',', '.')) || 2.5;
-    const obsText = document.getElementById('editObs').value.trim();
+    const custoNum = parseCurrency(document.getElementById('editCustoPrincipal')?.value);
+    const markupNum = parseFloat((document.getElementById('editMarkup')?.value || '2.5').replace(',', '.')) || 2.5;
+    const obsText = (document.getElementById('editObs')?.value || '').trim();
 
     // Variações
-    const v1Name = document.getElementById('editVar1Name').value.trim();
-    const v1Price = parseCurrency(document.getElementById('editVar1Price').value) || custoNum;
+    const v1Name = (document.getElementById('editVar1Name')?.value || '').trim();
+    const v1Price = parseCurrency(document.getElementById('editVar1Price')?.value) || custoNum;
 
-    const v2Name = document.getElementById('editVar2Name').value.trim();
-    const v2Price = parseCurrency(document.getElementById('editVar2Price').value) || custoNum;
+    const v2Name = (document.getElementById('editVar2Name')?.value || '').trim();
+    const v2Price = parseCurrency(document.getElementById('editVar2Price')?.value) || custoNum;
 
-    const v3Name = document.getElementById('editVar3Name').value.trim();
-    const v3Price = parseCurrency(document.getElementById('editVar3Price').value) || custoNum;
+    const v3Name = (document.getElementById('editVar3Name')?.value || '').trim();
+    const v3Price = parseCurrency(document.getElementById('editVar3Price')?.value) || custoNum;
 
     const newVariacoes = [];
     if (v1Name) newVariacoes.push({ nome: v1Name, preco: v1Price, precoFormatted: formatCurrency(v1Price) });
@@ -1015,8 +1030,10 @@ async function handleSaveEditProduct(e) {
     } catch (err) {}
 
     // Feedback visual
+    const btnSave = document.getElementById('btnSaveEdit');
     const btnSaveText = document.getElementById('btnSaveEditText');
-    if (btnSaveText) btnSaveText.innerHTML = '<i class="fa-solid fa-check"></i> Salvando na Planilha...';
+    if (btnSave) btnSave.disabled = true;
+    if (btnSaveText) btnSaveText.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Salvando na Planilha...';
 
     // Dispara sincronização com o backend / webhook da planilha
     const payload = {
@@ -1043,22 +1060,31 @@ async function handleSaveEditProduct(e) {
         
         const result = await response.json();
         if (result.googleSync && result.googleSync.success) {
-            console.log('Sincronizado com a planilha com sucesso!');
+            showToast(`Produto ${sku} atualizado na Planilha Google!`);
         } else if (result.googleSync && result.googleSync.error) {
             console.warn('Erro ao sincronizar com Google Sheets:', result.googleSync.error);
-            alert('Atenção: Houve um erro ao sincronizar com a planilha do Google Sheets: ' + result.googleSync.error);
+            showToast(`Salvo no app (Aviso Google Sheets: ${result.googleSync.error})`);
+        } else {
+            showToast(`Produto ${sku} atualizado com sucesso!`);
         }
     } catch (err) {
         console.warn('Sync com backend falhou:', err);
+        showToast(`Salvo localmente no App!`);
+    } finally {
+        if (btnSave) btnSave.disabled = false;
+        if (btnSaveText) btnSaveText.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Salvar & Atualizar Planilha';
     }
 
     // Atualiza a tela imediatamente
-    renderShowcaseView();
-    renderListView();
+    if (state.currentView === 'showcase') {
+        renderShowcaseView();
+    } else {
+        renderListView();
+    }
 
     setTimeout(() => {
         closeEditProductModal();
-    }, 400);
+    }, 200);
 }
 
 function renderQuickSearchResults(query) {

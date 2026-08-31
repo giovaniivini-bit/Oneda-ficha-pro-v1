@@ -1,0 +1,1 @@
+const fs = require('fs'); const html = fs.readFileSync('index.html', 'utf8'); const js = fs.readFileSync('app.js', 'utf8'); const ids = [...js.matchAll(/document.getElementById\('([']+)'\)/g)].map(m => m[1]); const missing = ids.filter(id => !html.includes('id=\" " + id + " "\')); console.log(Array.from(new Set(missing)));  

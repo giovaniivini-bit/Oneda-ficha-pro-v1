@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
     <!-- Estilos -->
-    <link rel="stylesheet" href="style.css?v=13.0.0">
+    <link rel="stylesheet" href="style.css?v=16.0.0">
 </head>
 <body class="theme-dark">
     <!-- Efeitos de Fundo Luminoso (Ambient Mesh Glow) -->
@@ -413,7 +413,7 @@
                 <button class="modal-close-btn" id="btnCloseEditModal" onclick="closeEditProductModal()"><i class="fa-solid fa-xmark"></i></button>
             </div>
             
-            <form id="editProductForm" class="modal-edit-body">
+            <form id="editProductForm" class="modal-edit-body" onsubmit="handleSaveEditProduct(event); return false;">
                 <div class="edit-grid-2col">
                     <div class="edit-field-group">
                         <label>Código da Referência (SKU):</label>
@@ -469,7 +469,7 @@
 
                 <div class="modal-edit-footer">
                     <button type="button" class="btn-cancel-edit" id="btnCancelEdit" onclick="closeEditProductModal()">Cancelar</button>
-                    <button type="submit" class="btn-save-edit" id="btnSaveEdit">
+                    <button type="button" class="btn-save-edit" id="btnSaveEdit" onclick="handleSaveEditProduct(event)">
                         <i class="fa-solid fa-floppy-disk"></i>
                         <span id="btnSaveEditText">Salvar & Atualizar Planilha</span>
                     </button>
@@ -535,7 +535,10 @@
     <!-- CONTAINER OCULTO PARA IMPRESSÃO 1 POR FOLHA EM ALTA DEFINIÇÃO -->
     <div id="printArea" class="print-only-area"></div>
 
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="appGlobalToast" class="global-toast"></div>
+
     <!-- Script Principal -->
-    <script src="app.js?v=13.0.0"></script>
+    <script src="app.js?v=16.0.0"></script>
 </body>
 </html>
