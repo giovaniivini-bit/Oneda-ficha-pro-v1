@@ -390,12 +390,7 @@ function renderListView() {
         let diffBadgeHTML = '';
         if (isMarkupActive) {
             const simulatedPdv = cost * numMarkup;
-            diffBadgeHTML = `
-                <div class="row-diff-badge diff-markup">
-                    <span class="markup-pdv-val">${formatCurrency(simulatedPdv)}</span>
-                    <span class="markup-diff-tag ${diff > 0 ? 'plus' : (diff < 0 ? 'minus' : 'zero')}">(${diffFormatted})</span>
-                </div>
-            `;
+            diffBadgeHTML = `<span class="row-diff-badge diff-markup">${formatCurrency(simulatedPdv)}</span>`;
         } else {
             if (Math.abs(diff) < 0.009) {
                 diffBadgeHTML = `<span class="row-diff-badge diff-zero">R$ 0,00</span>`;
