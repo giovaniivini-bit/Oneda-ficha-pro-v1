@@ -88,7 +88,11 @@ const state = {
     currentIndex: 0,
     activeVariation: null,
     customMarkup: 2.5,
-    lastSync: null
+    lastSync: null,
+    // Filtros exclusivos da Tela de Lista
+    listFilterSala: 'ALL',
+    listSimulateMarkup: 'none',
+    listSort: 'price-asc'
 };
 
 // Inicialização
@@ -286,57 +290,143 @@ function renderPresentationScreen() {
 }
 
 /**
- * 2.A: Renderização do Modo Lista
+ * 2.A: Renderização do Modo Lista (Tabela com Miniaturas e Filtros)
  */
 function renderListView() {
-    const grid = document.getElementById('productsGrid');
+    const tableBody = document.getElementById('productsTableBody');
     const emptyState = document.getElementById('emptyStateList');
-    if (!grid) return;
+    const tableWrapper = document.getElementById('productsTableWrapper');
+    const thColDiff = document.getElementById('thColDiff');
+    const selectSala = document.getElementById('filterListSala');
+    const selectMarkup = document.getElementById('filterListMarkup');
+    const selectSort = document.getElementById('filterListSort');
 
-    if (state.filteredProducts.length === 0) {
-        grid.innerHTML = '';
-        emptyState.style.display = 'block';
+    if (!tableBody) return;
+
+    // Atualiza opções do select de salas se necessário
+    if (selectSala) {
+        const currentVal = selectSala.value || state.listFilterSala;
+        let html = '<option value="ALL">Todas as Salas</option>';
+        state.availableRooms.forEach(room => {
+            html += `<option value="${escapeHTML(room)}">${escapeHTML(room)}</option>`;
+        });
+        selectSala.innerHTML = html;
+        selectSala.value = state.availableRooms.includes(currentVal) ? currentVal : 'ALL';
+        state.listFilterSala = selectSala.value;
+    }
+
+    if (selectMarkup) {
+        selectMarkup.value = state.listSimulateMarkup;
+    }
+    if (selectSort) {
+        selectSort.value = state.listSort;
+    }
+
+    // Filtra produtos de acordo com os filtros globais e o filtro de sala da lista
+    let listProducts = [...state.filteredProducts];
+    if (state.listFilterSala !== 'ALL') {
+        listProducts = listProducts.filter(p => p.sala === state.listFilterSala);
+    }
+
+    // Ordenação
+    const sortMode = state.listSort;
+    listProducts.sort((a, b) => {
+        if (sortMode === 'price-asc') return (a.precoPrincipal || 0) - (b.precoPrincipal || 0);
+        if (sortMode === 'price-desc') return (b.precoPrincipal || 0) - (a.precoPrincipal || 0);
+        if (sortMode === 'sku-asc') return (a.produto || '').localeCompare(b.produto || '');
+        if (sortMode === 'sku-desc') return (b.produto || '').localeCompare(a.produto || '');
+        if (sortMode === 'desc-asc') return (a.descricao || '').localeCompare(b.descricao || '');
+        return 0;
+    });
+
+    // Contador da lista
+    const listTotalCounter = document.getElementById('listTotalCounter');
+    if (listTotalCounter) {
+        listTotalCounter.textContent = `Exibindo ${listProducts.length} produto${listProducts.length !== 1 ? 's' : ''}`;
+    }
+
+    if (listProducts.length === 0) {
+        tableBody.innerHTML = '';
+        if (tableWrapper) tableWrapper.style.display = 'none';
+        if (emptyState) emptyState.style.display = 'block';
         return;
     }
 
-    emptyState.style.display = 'none';
-    grid.innerHTML = '';
+    if (tableWrapper) tableWrapper.style.display = 'flex';
+    if (emptyState) emptyState.style.display = 'none';
+    tableBody.innerHTML = '';
 
-    state.filteredProducts.forEach((product, idx) => {
-        const card = document.createElement('div');
-        card.className = 'product-card';
+    // Configuração do Markup e cabeçalho de coluna
+    const markupVal = state.listSimulateMarkup;
+    const isMarkupActive = markupVal !== 'none';
+    const numMarkup = parseFloat(markupVal) || 0;
+
+    if (thColDiff) {
+        thColDiff.textContent = isMarkupActive 
+            ? `PDV SIMULADO (${numMarkup}x)` 
+            : `DIFERENÇA BASE`;
+    }
+
+    // Custo base de referência para a coluna de diferença
+    const baseProduct = listProducts[0];
+    const baseCost = baseProduct ? (baseProduct.precoPrincipal || 0) : 0;
+
+    listProducts.forEach((product) => {
+        const row = document.createElement('div');
+        row.className = 'table-list-row';
         const imgUrl = getProductImageUrl(product.produto);
+        const cost = product.precoPrincipal || 0;
 
-        card.innerHTML = `
-            <div class="card-img-container">
-                <span class="card-room-badge">${escapeHTML(product.sala || 'SALA')}</span>
-                <img src="${imgUrl}" alt="${product.produto}" class="card-img" onerror="handleCardImgError(this, '${product.produto}')">
-            </div>
-            <div class="card-body">
-                <div class="card-sku-title">${escapeHTML(product.produto)}</div>
-                ${product.descricao ? `<div class="card-desc-subtitle">${escapeHTML(product.descricao)}</div>` : ''}
-                
-                <div class="card-price-row">
-                    <div class="card-price-block">
-                        <span class="card-price-label">Custo Base</span>
-                        <span class="card-price-val">${product.precoPrincipalFormatted}</span>
-                    </div>
-                    <div class="card-pdv-block">
-                        <span class="card-price-label">PDV Sugerido</span>
-                        <span class="card-pdv-val">${product.pdvFormatted}</span>
-                    </div>
+        const diff = cost - baseCost;
+        let diffFormatted = '';
+        if (Math.abs(diff) < 0.009) {
+            diffFormatted = 'R$ 0,00';
+        } else if (diff > 0) {
+            diffFormatted = `+ ${formatCurrency(diff)}`;
+        } else {
+            diffFormatted = `- ${formatCurrency(Math.abs(diff))}`;
+        }
+
+        let diffBadgeHTML = '';
+        if (isMarkupActive) {
+            const simulatedPdv = cost * numMarkup;
+            diffBadgeHTML = `
+                <div class="row-diff-badge diff-markup">
+                    <span class="markup-pdv-val">${formatCurrency(simulatedPdv)}</span>
+                    <span class="markup-diff-tag ${diff > 0 ? 'plus' : (diff < 0 ? 'minus' : 'zero')}">(${diffFormatted})</span>
                 </div>
+            `;
+        } else {
+            if (Math.abs(diff) < 0.009) {
+                diffBadgeHTML = `<span class="row-diff-badge diff-zero">R$ 0,00</span>`;
+            } else if (diff > 0) {
+                diffBadgeHTML = `<span class="row-diff-badge diff-plus">${diffFormatted}</span>`;
+            } else {
+                diffBadgeHTML = `<span class="row-diff-badge diff-minus">${diffFormatted}</span>`;
+            }
+        }
+
+        row.innerHTML = `
+            <div class="row-thumb-box">
+                <img src="${imgUrl}" alt="${product.produto}" class="row-thumb-img" loading="lazy" onerror="handleThumbImgError(this)">
             </div>
+            <div class="row-sku-text">${escapeHTML(product.produto)}</div>
+            <div class="row-desc-text" title="${escapeHTML(product.descricao || '')}">${escapeHTML(product.descricao || '—')}</div>
+            <div class="row-cost-text">${product.precoPrincipalFormatted}</div>
+            <div class="row-diff-cell">${diffBadgeHTML}</div>
         `;
 
-        card.addEventListener('click', () => {
-            state.currentIndex = idx;
+        row.addEventListener('click', () => {
+            const originalIdx = state.filteredProducts.findIndex(p => p.produto === product.produto);
+            if (originalIdx !== -1) {
+                state.currentIndex = originalIdx;
+            }
             state.activeVariation = null;
             state.currentView = 'showcase';
             renderPresentationScreen();
         });
 
-        grid.appendChild(card);
+        tableBody.appendChild(row);
     });
 }
 
@@ -592,6 +682,31 @@ function setupEventListeners() {
         state.currentView = 'showcase';
         renderPresentationScreen();
     });
+
+    // Filtros exclusivos da Tela de Lista
+    const selectListSala = document.getElementById('filterListSala');
+    if (selectListSala) {
+        selectListSala.addEventListener('change', (e) => {
+            state.listFilterSala = e.target.value;
+            renderListView();
+        });
+    }
+
+    const selectListMarkup = document.getElementById('filterListMarkup');
+    if (selectListMarkup) {
+        selectListMarkup.addEventListener('change', (e) => {
+            state.listSimulateMarkup = e.target.value;
+            renderListView();
+        });
+    }
+
+    const selectListSort = document.getElementById('filterListSort');
+    if (selectListSort) {
+        selectListSort.addEventListener('change', (e) => {
+            state.listSort = e.target.value;
+            renderListView();
+        });
+    }
 
     // Tela 2: Navegação Vertical (Setas Cima ↑ / Baixo ↓)
     document.getElementById('btnPrevProductUp').addEventListener('click', prevProduct);

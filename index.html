@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
     <!-- Estilos -->
-    <link rel="stylesheet" href="style.css?v=7.0.0">
+    <link rel="stylesheet" href="style.css?v=8.0.0">
 </head>
 <body class="theme-dark">
     <!-- Efeitos de Fundo Luminoso (Ambient Mesh Glow) -->
@@ -165,22 +165,68 @@
         <main class="presentation-main" id="presentationMain">
             
             <!-- ============================================== -->
-            <!-- 2.A: MODO LISTA (ROLAGEM LIVRE PARA BAIXO)      -->
+            <!-- 2.A: MODO LISTA (TABELA MODERNA COM FILTROS)    -->
             <!-- ============================================== -->
             <section class="view-panel view-list active" id="viewListPanel">
-                <div class="list-stats-bar">
-                    <span id="listTotalCounter">Exibindo 0 produtos</span>
-                    <span class="list-tip">Clique em qualquer produto para abrir a folha em 100% da tela</span>
+                <!-- BARRA DE FILTROS SUPERIOR DA TELA DE LISTA -->
+                <div class="list-filters-bar" id="listFiltersBar">
+                    <div class="filter-item-group">
+                        <label for="filterListSala"><i class="fa-solid fa-door-open"></i> SALA</label>
+                        <select id="filterListSala" class="custom-select-dark">
+                            <option value="ALL">Todas as Salas</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-item-group">
+                        <label for="filterListMarkup"><i class="fa-solid fa-chart-line"></i> SIMULAR MARKUP</label>
+                        <select id="filterListMarkup" class="custom-select-dark">
+                            <option value="none">Sem Markup (Diferença Base)</option>
+                            <option value="1.5">Markup 1.5x</option>
+                            <option value="1.8">Markup 1.8x</option>
+                            <option value="2.0">Markup 2.0x</option>
+                            <option value="2.2">Markup 2.2x</option>
+                            <option value="2.5" selected>Markup 2.5x (Padrão)</option>
+                            <option value="2.8">Markup 2.8x</option>
+                            <option value="3.0">Markup 3.0x</option>
+                            <option value="3.5">Markup 3.5x</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-item-group">
+                        <label for="filterListSort"><i class="fa-solid fa-arrow-down-short-wide"></i> ORDENAR POR</label>
+                        <select id="filterListSort" class="custom-select-dark">
+                            <option value="price-asc" selected>Mais Barato</option>
+                            <option value="price-desc">Mais Caro</option>
+                            <option value="sku-asc">Produto (A → Z)</option>
+                            <option value="sku-desc">Produto (Z → A)</option>
+                            <option value="desc-asc">Descrição (A → Z)</option>
+                        </select>
+                    </div>
                 </div>
 
-                <div class="products-grid" id="productsGrid">
-                    <!-- Cards gerados via JS -->
+                <div class="list-stats-bar">
+                    <span id="listTotalCounter">Exibindo 0 produtos</span>
+                    <span class="list-tip"><i class="fa-solid fa-mouse-pointer"></i> Clique em qualquer linha para abrir a folha em 100% da tela</span>
+                </div>
+
+                <!-- TABELA / LISTA MODERNA DE PRODUTOS -->
+                <div class="products-table-wrapper" id="productsTableWrapper">
+                    <div class="products-table-header">
+                        <div class="th-col col-thumb">FOTO</div>
+                        <div class="th-col col-sku">PRODUTO</div>
+                        <div class="th-col col-desc">DESCRIÇÃO</div>
+                        <div class="th-col col-cost">CUSTO (R$)</div>
+                        <div class="th-col col-diff" id="thColDiff">DIFERENÇA BASE / PDV</div>
+                    </div>
+                    <div class="products-table-body" id="productsTableBody">
+                        <!-- Linhas geradas via JS -->
+                    </div>
                 </div>
 
                 <div class="empty-state" id="emptyStateList" style="display: none;">
                     <div class="empty-icon"><i class="fa-solid fa-box-open"></i></div>
                     <h3>Nenhum produto encontrado</h3>
-                    <p>Tente ajustar a busca ou voltar à Tela Inicial para selecionar outras salas.</p>
+                    <p>Tente ajustar a busca ou os filtros da lista.</p>
                     <button class="btn-start-presentation btn-small" id="btnEmptyGoBack">Voltar aos Filtros</button>
                 </div>
             </section>
@@ -411,6 +457,6 @@
     </div>
 
     <!-- Script Principal -->
-    <script src="app.js?v=7.0.0"></script>
+    <script src="app.js?v=8.0.0"></script>
 </body>
 </html>
