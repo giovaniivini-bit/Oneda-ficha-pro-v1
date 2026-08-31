@@ -1,0 +1,1367 @@
+/**
+ * ==========================================================================
+ * ONEDA FICHA PRO - Lógica da Aplicação (V2.0.0)
+ * Arquitetura de 2 Telas: Tela 1 (Configuração) & Tela 2 (Apresentação)
+ * Navegação por Setas CIMA (↑) / BAIXO (↓) no Modo 1 por Folha Fixo
+ * ==========================================================================
+ */
+
+// Google Sheets Config
+const SPREADSHEET_ID = '1fX27pHe53zhNf3hb9-RZCi3E0DoU5pY0I93nwM_2o-Y';
+const GOOGLE_SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
+const GOOGLE_SHEET_FALLBACK_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv`;
+
+// Dados Iniciais Offline (Exatamente espelhado da planilha)
+const INITIAL_FALLBACK_PRODUCTS = [
+    {
+        id: 1,
+        sala: 'T54 - KIDS',
+        produto: '01.16.00.7759',
+        precoPrincipal: 15.00,
+        precoPrincipalFormatted: 'R$ 15,00',
+        obs: 'aaa',
+        markup: 2.5,
+        pdvSugerido: 37.50,
+        pdvFormatted: 'R$ 37,50',
+        variacoes: [
+            { nome: 'sem estampa', preco: 12.00, precoFormatted: 'R$ 12,00' },
+            { nome: 'sem nada', preco: 11.00, precoFormatted: 'R$ 11,00' },
+            { nome: 'sem costura', preco: 11.00, precoFormatted: 'R$ 11,00' }
+        ]
+    },
+    {
+        id: 2,
+        sala: 'T54 - KIDS',
+        produto: '01.16.00.7756C',
+        precoPrincipal: 15.00,
+        precoPrincipalFormatted: 'R$ 15,00',
+        obs: 'nenhuma',
+        markup: 2.5,
+        pdvSugerido: 37.50,
+        pdvFormatted: 'R$ 37,50',
+        variacoes: []
+    },
+    {
+        id: 3,
+        sala: 'T54 - KIDS',
+        produto: '01.16.00.7756A',
+        precoPrincipal: 16.00,
+        precoPrincipalFormatted: 'R$ 16,00',
+        obs: 'vvvv',
+        markup: 2.5,
+        pdvSugerido: 40.00,
+        pdvFormatted: 'R$ 40,00',
+        variacoes: []
+    },
+    {
+        id: 4,
+        sala: 'T54 - KIDS',
+        produto: '01.16.00.7756B',
+        precoPrincipal: 18.00,
+        precoPrincipalFormatted: 'R$ 18,00',
+        obs: 'dddddd',
+        markup: 2.5,
+        pdvSugerido: 45.00,
+        pdvFormatted: 'R$ 45,00',
+        variacoes: [
+            { nome: 'sem nada', preco: 11.00, precoFormatted: 'R$ 11,00' }
+        ]
+    }
+];
+
+// Estado Global da Aplicação
+let imageMap = {};
+let manualUploadsMap = {};
+try {
+    const saved = localStorage.getItem('oneda_manual_images');
+    if (saved) manualUploadsMap = JSON.parse(saved);
+} catch (e) {}
+
+const state = {
+    allProducts: [...INITIAL_FALLBACK_PRODUCTS],
+    filteredProducts: [],
+    availableRooms: [],
+    selectedRooms: new Set(),
+    searchQuery: '',
+    currentScreen: 'welcome', // 'welcome' (Tela 1) | 'presentation' (Tela 2)
+    currentView: 'showcase',  // 'list' | 'showcase'
+    currentIndex: 0,
+    activeVariation: null,
+    customMarkup: 2.5,
+    lastSync: null
+};
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', () => {
+    loadImageMap();
+    initApp();
+    setupEventListeners();
+    syncGoogleSheets(false);
+
+    // Polling automático da planilha a cada 8 segundos
+    setInterval(() => {
+        syncGoogleSheets(true);
+    }, 8000);
+});
+
+async function loadImageMap() {
+    try {
+        const res = await fetch('image_map.json', { cache: 'no-store' });
+        if (res.ok) {
+            imageMap = await res.json();
+        }
+    } catch (e) {}
+}
+
+/**
+ * Inicialização
+ */
+function initApp() {
+    extractRooms();
+    applyFilters();
+    renderWelcomeRooms();
+    updateScreenVisibility();
+}
+
+/**
+ * Extrai lista de salas únicas
+ */
+function extractRooms() {
+    const rooms = new Set();
+    state.allProducts.forEach(p => {
+        if (p.sala) rooms.add(p.sala);
+    });
+    state.availableRooms = Array.from(rooms);
+
+    if (state.selectedRooms.size === 0) {
+        state.availableRooms.forEach(r => state.selectedRooms.add(r));
+    }
+}
+
+/**
+ * Aplica filtros de sala e busca
+ */
+function applyFilters() {
+    const query = state.searchQuery.trim().toLowerCase();
+
+    state.filteredProducts = state.allProducts.filter(p => {
+        const roomMatch = state.selectedRooms.size === 0 || state.selectedRooms.has(p.sala);
+        if (!roomMatch) return false;
+
+        if (!query) return true;
+
+        const skuMatch = p.produto && p.produto.toLowerCase().includes(query);
+        const roomMatch2 = p.sala && p.sala.toLowerCase().includes(query);
+        const obsMatch = p.obs && p.obs.toLowerCase().includes(query);
+        const varMatch = p.variacoes && p.variacoes.some(v => v.nome.toLowerCase().includes(query));
+
+        return skuMatch || roomMatch2 || obsMatch || varMatch;
+    });
+
+    if (state.currentIndex >= state.filteredProducts.length) {
+        state.currentIndex = Math.max(0, state.filteredProducts.length - 1);
+    }
+
+    updateCounterLabels();
+}
+
+/**
+ * Atualiza rótulos de contagem nas 2 telas
+ */
+function updateCounterLabels() {
+    const total = state.filteredProducts.length;
+    
+    // Tela 1 Hint
+    const startHint = document.getElementById('startCounterHint');
+    if (startHint) {
+        if (total > 0) {
+            startHint.textContent = `${total} produto${total !== 1 ? 's' : ''} pronto${total !== 1 ? 's' : ''} para apresentação`;
+        } else {
+            startHint.textContent = `Nenhum produto selecionado. Marque pelo menos uma sala.`;
+        }
+    }
+
+    // Tela 2 Lista
+    const listCounter = document.getElementById('listTotalCounter');
+    if (listCounter) {
+        listCounter.textContent = `Exibindo ${total} produto${total !== 1 ? 's' : ''}`;
+    }
+
+    // Tela 2 Header Sala Tag
+    const roomLabel = document.getElementById('activeRoomLabel');
+    if (roomLabel) {
+        if (state.selectedRooms.size === state.availableRooms.length) {
+            roomLabel.textContent = `TODAS AS SALAS (${total})`;
+        } else {
+            const names = Array.from(state.selectedRooms).join(', ');
+            roomLabel.textContent = `SALA: ${names} (${total})`;
+        }
+    }
+}
+
+/**
+ * Alterna visibilidade entre Tela 1 (Welcome) e Tela 2 (Presentation)
+ */
+function updateScreenVisibility() {
+    const screenWelcome = document.getElementById('screenWelcome');
+    const screenPresentation = document.getElementById('screenPresentation');
+
+    if (state.currentScreen === 'welcome') {
+        screenWelcome.style.display = 'flex';
+        screenPresentation.style.display = 'none';
+        renderWelcomeRooms();
+    } else {
+        screenWelcome.style.display = 'none';
+        screenPresentation.style.display = 'flex';
+        renderPresentationScreen();
+    }
+}
+
+/**
+ * ==========================================================================
+ * TELA 1: RENDERIZAÇÃO DOS FILTROS DE ENTRADA
+ * ==========================================================================
+ */
+function renderWelcomeRooms() {
+    const container = document.getElementById('welcomeRoomsContainer');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    state.availableRooms.forEach(room => {
+        const count = state.allProducts.filter(p => p.sala === room).length;
+        const isSelected = state.selectedRooms.has(room);
+
+        const chip = document.createElement('div');
+        chip.className = `room-chip ${isSelected ? 'active' : ''}`;
+        chip.innerHTML = `
+            <i class="fa-solid fa-${isSelected ? 'check' : 'door-closed'}"></i>
+            <span>${escapeHTML(room)}</span>
+            <span class="count-tag">${count}</span>
+        `;
+
+        chip.addEventListener('click', () => {
+            if (state.selectedRooms.has(room)) {
+                if (state.selectedRooms.size > 1) {
+                    state.selectedRooms.delete(room);
+                }
+            } else {
+                state.selectedRooms.add(room);
+            }
+            applyFilters();
+            renderWelcomeRooms();
+        });
+
+        container.appendChild(chip);
+    });
+}
+
+/**
+ * ==========================================================================
+ * TELA 2: RENDERIZAÇÃO DA APRESENTAÇÃO (LISTA OU 1 POR FOLHA FIXO)
+ * ==========================================================================
+ */
+function renderPresentationScreen() {
+    const viewListPanel = document.getElementById('viewListPanel');
+    const viewShowcasePanel = document.getElementById('viewShowcasePanel');
+    const btnToggleList = document.getElementById('btnToggleList');
+    const btnToggleShowcase = document.getElementById('btnToggleShowcase');
+
+    if (state.currentView === 'list') {
+        viewListPanel.classList.add('active');
+        viewShowcasePanel.classList.remove('active');
+        btnToggleList.classList.add('active');
+        btnToggleShowcase.classList.remove('active');
+        renderListView();
+    } else {
+        viewListPanel.classList.remove('active');
+        viewShowcasePanel.classList.add('active');
+        btnToggleList.classList.remove('active');
+        btnToggleShowcase.classList.add('active');
+        renderShowcaseView();
+    }
+
+    updateCounterLabels();
+}
+
+/**
+ * 2.A: Renderização do Modo Lista
+ */
+function renderListView() {
+    const grid = document.getElementById('productsGrid');
+    const emptyState = document.getElementById('emptyStateList');
+    if (!grid) return;
+
+    if (state.filteredProducts.length === 0) {
+        grid.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+    }
+
+    emptyState.style.display = 'none';
+    grid.innerHTML = '';
+
+    state.filteredProducts.forEach((product, idx) => {
+        const card = document.createElement('div');
+        card.className = 'product-card';
+        const imgUrl = getProductImageUrl(product.produto);
+
+        card.innerHTML = `
+            <div class="card-img-container">
+                <span class="card-room-badge">${escapeHTML(product.sala || 'SALA')}</span>
+                <img src="${imgUrl}" alt="${product.produto}" class="card-img" onerror="handleCardImgError(this, '${product.produto}')">
+            </div>
+            <div class="card-body">
+                <div class="card-sku-title">${escapeHTML(product.produto)}</div>
+                
+                <div class="card-price-row">
+                    <div class="card-price-block">
+                        <span class="card-price-label">Custo Base</span>
+                        <span class="card-price-val">${product.precoPrincipalFormatted}</span>
+                    </div>
+                    <div class="card-pdv-block">
+                        <span class="card-price-label">PDV Sugerido</span>
+                        <span class="card-pdv-val">${product.pdvFormatted}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        card.addEventListener('click', () => {
+            state.currentIndex = idx;
+            state.activeVariation = null;
+            state.currentView = 'showcase';
+            renderPresentationScreen();
+        });
+
+        grid.appendChild(card);
+    });
+}
+
+/**
+ * 2.B: Renderização do Modo 1 por Folha Fixo (Showcase 100%)
+ */
+function renderShowcaseView() {
+    const product = state.filteredProducts[state.currentIndex];
+    if (!product) return;
+
+    // Header & Meta
+    document.getElementById('imgBadgeSku').textContent = product.produto || 'SKU';
+    document.getElementById('showcaseCounterPill').textContent = `${state.currentIndex + 1} / ${state.filteredProducts.length}`;
+
+    // Imagem do Produto
+    const imgEl = document.getElementById('showcaseProductImg');
+    const placeholderEl = document.getElementById('imagePlaceholder');
+    const fallbackText = document.getElementById('imgSkuFallbackText');
+    loadImageWithFallbackCascade(imgEl, placeholderEl, fallbackText, product.produto);
+
+    // Observações (obs: espelho fiel da planilha)
+    const obsTextEl = document.getElementById('showcaseObsText');
+    const obsBox = document.getElementById('showcaseObsBox');
+    if (product.obs && product.obs.trim()) {
+        obsTextEl.textContent = product.obs.trim();
+        obsBox.style.opacity = '1';
+    } else {
+        obsTextEl.textContent = 'Nenhuma observação cadastrada na planilha.';
+        obsBox.style.opacity = '0.7';
+    }
+
+    // Preço e PDV Sugerido
+    renderShowcasePricing(product);
+
+    // Variações
+    renderShowcaseVariations(product);
+
+    // Carrossel Inferior
+    renderStripThumbnails();
+}
+
+/**
+ * Renderiza Preço e PDV do Showcase
+ */
+function renderShowcasePricing(product) {
+    let currentPrice = product.precoPrincipal;
+    let priceCaption = 'Custo base da referência';
+
+    if (state.activeVariation !== null && product.variacoes[state.activeVariation]) {
+        const v = product.variacoes[state.activeVariation];
+        currentPrice = v.preco;
+        priceCaption = `Opção: ${v.nome}`;
+    }
+
+    const effectiveMarkup = product.markup || 2.5;
+    const calculatedPdv = product.pdvSugerido || (currentPrice * effectiveMarkup);
+
+    document.getElementById('showcaseMainPrice').textContent = formatCurrency(currentPrice);
+    document.getElementById('showcasePriceTip').textContent = priceCaption;
+
+    document.getElementById('showcasePdvPrice').textContent = formatCurrency(calculatedPdv);
+    
+    const markupFormatted = effectiveMarkup.toString().replace('.', ',');
+    const markupBadge = document.getElementById('showcaseMarkupBadge');
+    if (markupBadge) {
+        markupBadge.textContent = `(Markup sugerido: ${markupFormatted})`;
+    }
+}
+
+/**
+ * Renderiza Variações (sem duplicar o item padrão, com micro-tag Variação 1, 2, 3...)
+ */
+function renderShowcaseVariations(product) {
+    const list = document.getElementById('showcaseVariationsList');
+    if (!list) return;
+
+    list.innerHTML = '';
+
+    if (!product.variacoes || product.variacoes.length === 0) {
+        list.innerHTML = `<div style="color: var(--text-muted); font-size: 12px; font-style: italic; padding: 8px 4px;">Sem opções adicionais cadastradas para este modelo.</div>`;
+        return;
+    }
+
+    // Variações específicas da planilha (Variação 1, Variação 2, etc.)
+    product.variacoes.forEach((v, i) => {
+        const isSel = state.activeVariation === i;
+        const row = document.createElement('div');
+        row.className = `variation-item-row ${isSel ? 'selected' : ''}`;
+        
+        row.innerHTML = `
+            <div class="var-text-col">
+                <span class="var-micro-tag">Variação ${i + 1}</span>
+                <span class="var-name">${escapeHTML(v.nome)}</span>
+            </div>
+            <span class="var-price">${v.precoFormatted}</span>
+        `;
+
+        row.addEventListener('click', () => {
+            // Toggle: se já estava selecionado, volta ao custo principal
+            if (state.activeVariation === i) {
+                state.activeVariation = null;
+            } else {
+                state.activeVariation = i;
+            }
+            renderShowcasePricing(product);
+            renderShowcaseVariations(product);
+        });
+
+        list.appendChild(row);
+    });
+}
+
+/**
+ * Renderiza miniaturas da barra inferior
+ */
+function renderStripThumbnails() {
+    const track = document.getElementById('stripTrack');
+    const countLabel = document.getElementById('stripCountLabel');
+    if (!track) return;
+
+    countLabel.textContent = state.filteredProducts.length;
+    track.innerHTML = '';
+
+    state.filteredProducts.forEach((p, idx) => {
+        const isActive = idx === state.currentIndex;
+        const item = document.createElement('div');
+        item.className = `strip-item ${isActive ? 'active' : ''}`;
+        item.id = `stripItem_${idx}`;
+
+        const imgUrl = getProductImageUrl(p.produto);
+        item.innerHTML = `
+            <img src="${imgUrl}" alt="${p.produto}" class="strip-img" onerror="handleThumbImgError(this)">
+            <span class="strip-sku">${escapeHTML(p.produto)}</span>
+        `;
+
+        item.addEventListener('click', () => {
+            state.currentIndex = idx;
+            state.activeVariation = null;
+            renderShowcaseView();
+            scrollStripItem(idx);
+        });
+
+        track.appendChild(item);
+    });
+
+    scrollStripItem(state.currentIndex);
+}
+
+function scrollStripItem(idx) {
+    setTimeout(() => {
+        const item = document.getElementById(`stripItem_${idx}`);
+        if (item) {
+            item.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+    }, 80);
+}
+
+/**
+ * ==========================================================================
+ * NAVEGAÇÃO DE PRODUTOS (SETAS CIMA / BAIXO)
+ * ==========================================================================
+ */
+function nextProduct() {
+    if (state.filteredProducts.length === 0) return;
+    state.currentIndex = (state.currentIndex + 1) % state.filteredProducts.length;
+    state.activeVariation = null;
+    if (state.currentView === 'showcase') {
+        renderShowcaseView();
+    }
+}
+
+function prevProduct() {
+    if (state.filteredProducts.length === 0) return;
+    state.currentIndex = (state.currentIndex - 1 + state.filteredProducts.length) % state.filteredProducts.length;
+    state.activeVariation = null;
+    if (state.currentView === 'showcase') {
+        renderShowcaseView();
+    }
+}
+
+/**
+ * ==========================================================================
+ * EVENT LISTENERS & ATALHOS DE TECLADO
+ * ==========================================================================
+ */
+function setupEventListeners() {
+    // Tela 1: Seleção de Opções de Apresentação (Lista vs 1 por Folha)
+    const optList = document.getElementById('optCardList');
+    const optShowcase = document.getElementById('optCardShowcase');
+
+    optList.addEventListener('click', () => {
+        state.currentView = 'list';
+        optList.classList.add('active');
+        optShowcase.classList.remove('active');
+    });
+
+    optShowcase.addEventListener('click', () => {
+        state.currentView = 'showcase';
+        optShowcase.classList.add('active');
+        optList.classList.remove('active');
+    });
+
+    // Tela 1: Botão Todas / Limpar Salas
+    document.getElementById('btnWelcomeAllRooms').addEventListener('click', () => {
+        state.availableRooms.forEach(r => state.selectedRooms.add(r));
+        applyFilters();
+        renderWelcomeRooms();
+    });
+    document.getElementById('btnWelcomeClearRooms').addEventListener('click', () => {
+        state.selectedRooms.clear();
+        applyFilters();
+        renderWelcomeRooms();
+    });
+
+    // Tela 1 -> Tela 2: INICIAR APRESENTAÇÃO
+    document.getElementById('btnStartPresentation').addEventListener('click', () => {
+        if (state.filteredProducts.length === 0) {
+            alert('Por favor, selecione pelo menos uma sala com produtos para iniciar!');
+            return;
+        }
+        state.currentScreen = 'presentation';
+        updateScreenVisibility();
+    });
+
+    // Tela 2 -> Tela 1: VOLTAR AOS FILTROS
+    document.getElementById('btnBackToWelcome').addEventListener('click', () => {
+        state.currentScreen = 'welcome';
+        updateScreenVisibility();
+    });
+    document.getElementById('btnEmptyGoBack')?.addEventListener('click', () => {
+        state.currentScreen = 'welcome';
+        updateScreenVisibility();
+    });
+
+    // Tela 2: Toggle Rápido Lista / 1 por Folha
+    document.getElementById('btnToggleList').addEventListener('click', () => {
+        state.currentView = 'list';
+        renderPresentationScreen();
+    });
+    document.getElementById('btnToggleShowcase').addEventListener('click', () => {
+        state.currentView = 'showcase';
+        renderPresentationScreen();
+    });
+
+    // Tela 2: Navegação Vertical (Setas Cima ↑ / Baixo ↓)
+    document.getElementById('btnPrevProductUp').addEventListener('click', prevProduct);
+    document.getElementById('btnNextProductDown').addEventListener('click', nextProduct);
+
+    // Barra de Busca da Tela 2
+    const searchInput = document.getElementById('searchInput');
+    const clearSearchBtn = document.getElementById('btnClearSearch');
+    searchInput.addEventListener('input', (e) => {
+        state.searchQuery = e.target.value;
+        clearSearchBtn.style.display = state.searchQuery ? 'block' : 'none';
+        applyFilters();
+        renderPresentationScreen();
+    });
+    clearSearchBtn.addEventListener('click', () => {
+        searchInput.value = '';
+        state.searchQuery = '';
+        clearSearchBtn.style.display = 'none';
+        applyFilters();
+        renderPresentationScreen();
+        searchInput.focus();
+    });
+
+    // Toggle Barra Inferior
+    document.getElementById('stripHandle').addEventListener('click', () => {
+        const track = document.getElementById('stripTrack');
+        const icon = document.getElementById('stripHandleIcon');
+        if (track.style.display === 'none') {
+            track.style.display = 'flex';
+            icon.className = 'fa-solid fa-chevron-up';
+        } else {
+            track.style.display = 'none';
+            icon.className = 'fa-solid fa-chevron-down';
+        }
+    });
+
+    // Fullscreen Toggle
+    document.getElementById('btnToggleFullscreen').addEventListener('click', toggleFullscreen);
+
+    // Zoom Image Modal
+    document.getElementById('btnZoomImage').addEventListener('click', openImageZoom);
+    document.getElementById('showcaseProductImg').addEventListener('click', openImageZoom);
+    document.getElementById('btnCloseZoom').addEventListener('click', closeImageZoom);
+    document.getElementById('imageZoomModal').addEventListener('click', (e) => {
+        if (e.target.id === 'imageZoomModal') closeImageZoom();
+    });
+
+    // Upload Manual & Drag-and-Drop
+    const btnUpload = document.getElementById('btnUploadImageManual');
+    const fileInput = document.getElementById('manualImageFileInput');
+    if (btnUpload && fileInput) {
+        btnUpload.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const prod = state.filteredProducts[state.currentIndex];
+                if (prod) {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => setManualProductImage(prod.produto, ev.target.result);
+                    reader.readAsDataURL(file);
+                }
+            }
+            fileInput.value = '';
+        });
+    }
+
+    const imgBox = document.getElementById('productImageBox');
+    if (imgBox) {
+        ['dragenter', 'dragover'].forEach(name => {
+            imgBox.addEventListener(name, (e) => {
+                e.preventDefault();
+                imgBox.style.borderColor = 'var(--accent-cyan)';
+            });
+        });
+        ['dragleave', 'drop'].forEach(name => {
+            imgBox.addEventListener(name, (e) => {
+                e.preventDefault();
+                imgBox.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+            });
+        });
+        imgBox.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            if (files && files.length > 0 && files[0].type.startsWith('image/')) {
+                const prod = state.filteredProducts[state.currentIndex];
+                if (prod) {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => setManualProductImage(prod.produto, ev.target.result);
+                    reader.readAsDataURL(files[0]);
+                }
+            }
+        });
+    }
+
+    // Modal Quick Search (Ctrl + K)
+    document.getElementById('btnCloseQuickSearch').addEventListener('click', closeQuickSearchModal);
+    document.getElementById('quickSearchModal').addEventListener('click', (e) => {
+        if (e.target.id === 'quickSearchModal') closeQuickSearchModal();
+    });
+    const modalInput = document.getElementById('modalSearchInput');
+    modalInput.addEventListener('input', (e) => renderQuickSearchResults(e.target.value));
+
+    // Modal de Edição de Ficha (Lápis Verde)
+    document.getElementById('btnOpenEditProduct').addEventListener('click', openEditProductModal);
+    document.getElementById('btnCloseEditModal').addEventListener('click', closeEditProductModal);
+    document.getElementById('btnCancelEdit').addEventListener('click', closeEditProductModal);
+    document.getElementById('editProductModal').addEventListener('click', (e) => {
+        if (e.target.id === 'editProductModal') closeEditProductModal();
+    });
+    document.getElementById('editProductForm').addEventListener('submit', handleSaveEditProduct);
+
+    // NAVEGAÇÃO GLOBAL POR TECLADO
+    window.addEventListener('keydown', (e) => {
+        // Ctrl + K
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            openQuickSearchModal();
+            return;
+        }
+
+        // ESC: Volta da Tela 2 para Tela 1 ou fecha modal
+        if (e.key === 'Escape') {
+            const zoomModal = document.getElementById('imageZoomModal');
+            const searchModal = document.getElementById('quickSearchModal');
+            if (zoomModal.style.display !== 'none') {
+                closeImageZoom();
+            } else if (searchModal.style.display !== 'none') {
+                closeQuickSearchModal();
+            } else if (state.currentScreen === 'presentation') {
+                state.currentScreen = 'welcome';
+                updateScreenVisibility();
+            }
+            return;
+        }
+
+        if (document.activeElement.tagName === 'INPUT') return;
+
+        // Se estiver no modo 1 por folha na Tela 2:
+        if (state.currentScreen === 'presentation' && state.currentView === 'showcase') {
+            // SETAS CIMA / BAIXO trocam produtos
+            if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                nextProduct();
+            } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevProduct();
+            } else if (e.key.toLowerCase() === 'f') {
+                toggleFullscreen();
+            }
+        }
+    });
+
+    // Rolagem suave do mouse para trocar produtos no modo fixo
+    let wheelCooldown = false;
+    window.addEventListener('wheel', (e) => {
+        if (state.currentScreen === 'presentation' && state.currentView === 'showcase') {
+            if (wheelCooldown) return;
+            if (Math.abs(e.deltaY) > 30) {
+                wheelCooldown = true;
+                if (e.deltaY > 0) {
+                    nextProduct();
+                } else {
+                    prevProduct();
+                }
+                setTimeout(() => { wheelCooldown = false; }, 300);
+            }
+        }
+    }, { passive: true });
+}
+
+/**
+ * ==========================================================================
+ * MODAIS E HELPERS
+ * ==========================================================================
+ */
+function openImageZoom() {
+    const product = state.filteredProducts[state.currentIndex];
+    if (!product) return;
+
+    const modal = document.getElementById('imageZoomModal');
+    const img = document.getElementById('zoomModalImg');
+    const caption = document.getElementById('zoomModalCaption');
+
+    img.src = getProductImageUrl(product.produto);
+    caption.textContent = `${product.produto} • Sala: ${product.sala}`;
+    modal.style.display = 'flex';
+}
+
+function closeImageZoom() {
+    document.getElementById('imageZoomModal').style.display = 'none';
+}
+
+function openQuickSearchModal() {
+    const modal = document.getElementById('quickSearchModal');
+    const input = document.getElementById('modalSearchInput');
+    modal.style.display = 'flex';
+    input.value = '';
+    renderQuickSearchResults('');
+    setTimeout(() => input.focus(), 50);
+}
+
+function closeQuickSearchModal() {
+    document.getElementById('quickSearchModal').style.display = 'none';
+}
+
+/**
+ * ==========================================================================
+ * MODAL DE EDIÇÃO DE PRODUTO & SINCRONIZAÇÃO COM A PLANILHA
+ * ==========================================================================
+ */
+function openEditProductModal() {
+    const product = state.filteredProducts[state.currentIndex];
+    if (!product) return;
+
+    document.getElementById('editProductSku').value = product.produto || '';
+    document.getElementById('editCustoPrincipal').value = (product.precoPrincipal || 0).toFixed(2).replace('.', ',');
+    document.getElementById('editMarkup').value = (product.markup || 2.5).toString().replace('.', ',');
+    document.getElementById('editObs').value = product.obs || '';
+
+    // Variação 1
+    const v1 = product.variacoes && product.variacoes[0] ? product.variacoes[0] : null;
+    document.getElementById('editVar1Name').value = v1 ? v1.nome : '';
+    document.getElementById('editVar1Price').value = v1 ? (v1.preco || 0).toFixed(2).replace('.', ',') : '';
+
+    // Variação 2
+    const v2 = product.variacoes && product.variacoes[1] ? product.variacoes[1] : null;
+    document.getElementById('editVar2Name').value = v2 ? v2.nome : '';
+    document.getElementById('editVar2Price').value = v2 ? (v2.preco || 0).toFixed(2).replace('.', ',') : '';
+
+    // Variação 3
+    const v3 = product.variacoes && product.variacoes[2] ? product.variacoes[2] : null;
+    document.getElementById('editVar3Name').value = v3 ? v3.nome : '';
+    document.getElementById('editVar3Price').value = v3 ? (v3.preco || 0).toFixed(2).replace('.', ',') : '';
+
+    const btnSaveText = document.getElementById('btnSaveEditText');
+    if (btnSaveText) btnSaveText.textContent = 'Salvar & Atualizar Planilha';
+
+    document.getElementById('editProductModal').style.display = 'flex';
+}
+
+function closeEditProductModal() {
+    const modal = document.getElementById('editProductModal');
+    if (modal) modal.style.display = 'none';
+}
+
+// Exportações globais
+window.openEditProductModal = openEditProductModal;
+window.closeEditProductModal = closeEditProductModal;
+window.handleSaveEditProduct = handleSaveEditProduct;
+
+async function handleSaveEditProduct(e) {
+    e.preventDefault();
+    const product = state.filteredProducts[state.currentIndex];
+    if (!product) return;
+
+    const sku = document.getElementById('editProductSku').value.trim();
+    const custoNum = parseCurrency(document.getElementById('editCustoPrincipal').value);
+    const markupNum = parseFloat(document.getElementById('editMarkup').value.replace(',', '.')) || 2.5;
+    const obsText = document.getElementById('editObs').value.trim();
+
+    // Variações
+    const v1Name = document.getElementById('editVar1Name').value.trim();
+    const v1Price = parseCurrency(document.getElementById('editVar1Price').value) || custoNum;
+
+    const v2Name = document.getElementById('editVar2Name').value.trim();
+    const v2Price = parseCurrency(document.getElementById('editVar2Price').value) || custoNum;
+
+    const v3Name = document.getElementById('editVar3Name').value.trim();
+    const v3Price = parseCurrency(document.getElementById('editVar3Price').value) || custoNum;
+
+    const newVariacoes = [];
+    if (v1Name) newVariacoes.push({ nome: v1Name, preco: v1Price, precoFormatted: formatCurrency(v1Price) });
+    if (v2Name) newVariacoes.push({ nome: v2Name, preco: v2Price, precoFormatted: formatCurrency(v2Price) });
+    if (v3Name) newVariacoes.push({ nome: v3Name, preco: v3Price, precoFormatted: formatCurrency(v3Price) });
+
+    const pdvCalculado = Number((custoNum * markupNum).toFixed(2));
+
+    // Atualiza o produto no estado local
+    product.precoPrincipal = custoNum;
+    product.precoPrincipalFormatted = formatCurrency(custoNum);
+    product.markup = markupNum;
+    product.pdvSugerido = pdvCalculado;
+    product.pdvFormatted = formatCurrency(pdvCalculado);
+    product.obs = obsText;
+    product.variacoes = newVariacoes;
+
+    // Atualiza também na lista completa
+    const fullProd = state.allProducts.find(p => p.produto === sku);
+    if (fullProd) {
+        Object.assign(fullProd, product);
+    }
+
+    // Persistência no LocalStorage
+    try {
+        let savedOverrides = {};
+        const stored = localStorage.getItem('oneda_product_overrides');
+        if (stored) savedOverrides = JSON.parse(stored);
+        savedOverrides[sku.toUpperCase()] = {
+            custoPrincipal: custoNum,
+            markup: markupNum,
+            pdvSugerido: pdvCalculado,
+            obs: obsText,
+            variacoes: newVariacoes
+        };
+        localStorage.setItem('oneda_product_overrides', JSON.stringify(savedOverrides));
+    } catch (err) {}
+
+    // Feedback visual
+    const btnSaveText = document.getElementById('btnSaveEditText');
+    if (btnSaveText) btnSaveText.innerHTML = '<i class="fa-solid fa-check"></i> Salvando na Planilha...';
+
+    // Dispara sincronização com o backend / webhook da planilha
+    const payload = {
+        produto: sku,
+        custoPrincipal: formatCurrency(custoNum),
+        markup: markupNum.toString().replace('.', ','),
+        pdvSugerido: formatCurrency(pdvCalculado),
+        obs: obsText,
+        var1_nome: v1Name,
+        var1_preco: v1Name ? formatCurrency(v1Price) : '',
+        var2_nome: v2Name,
+        var2_preco: v2Name ? formatCurrency(v2Price) : '',
+        var3_nome: v3Name,
+        var3_preco: v3Name ? formatCurrency(v3Price) : ''
+    };
+
+    try {
+        await fetch('/api/update-product', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+    } catch (err) {
+        console.warn('Sync com backend falhou:', err);
+    }
+
+    // Atualiza a tela imediatamente
+    renderShowcaseView();
+    renderListView();
+
+    setTimeout(() => {
+        closeEditProductModal();
+    }, 400);
+}
+
+function renderQuickSearchResults(query) {
+    const container = document.getElementById('modalSearchResults');
+    const q = query.trim().toLowerCase();
+
+    const matches = state.allProducts.filter(p => {
+        if (!q) return true;
+        return (p.produto && p.produto.toLowerCase().includes(q)) ||
+               (p.sala && p.sala.toLowerCase().includes(q)) ||
+               (p.obs && p.obs.toLowerCase().includes(q));
+    }).slice(0, 15);
+
+    if (matches.length === 0) {
+        container.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-muted);">Nenhum produto correspondente</div>`;
+        return;
+    }
+
+    container.innerHTML = '';
+    matches.forEach(p => {
+        const item = document.createElement('div');
+        item.className = 'search-result-item';
+        const imgUrl = getProductImageUrl(p.produto);
+
+        item.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <img src="${imgUrl}" alt="${p.produto}" style="width: 38px; height: 38px; object-fit: contain; background: #090c14; border-radius: 4px;" onerror="handleThumbImgError(this)">
+                <div>
+                    <div style="font-weight: 700; color: #fff;">${escapeHTML(p.produto)}</div>
+                    <div style="font-size: 11px; color: var(--accent-cyan);">${escapeHTML(p.sala)}</div>
+                </div>
+            </div>
+            <div style="font-weight: 800; color: var(--accent-emerald);">${p.precoPrincipalFormatted}</div>
+        `;
+
+        item.addEventListener('click', () => {
+            if (!state.selectedRooms.has(p.sala)) {
+                state.selectedRooms.add(p.sala);
+                applyFilters();
+                renderWelcomeRooms();
+            }
+
+            const targetIdx = state.filteredProducts.findIndex(item => item.produto === p.produto);
+            if (targetIdx !== -1) {
+                state.currentIndex = targetIdx;
+            }
+            state.activeVariation = null;
+            state.currentScreen = 'presentation';
+            state.currentView = 'showcase';
+            closeQuickSearchModal();
+            updateScreenVisibility();
+        });
+
+        container.appendChild(item);
+    });
+}
+
+/**
+ * ==========================================================================
+ * FORÇAR SINCRONIZAÇÃO (PLANILHA + FOTOS)
+ * ==========================================================================
+ */
+async function triggerForceSync() {
+    const syncBtn = document.getElementById('btnForceSync');
+    const syncIcon = document.getElementById('syncIcon');
+    const syncText = document.getElementById('syncBtnText');
+
+    if (syncIcon) syncIcon.classList.add('fa-spin');
+    if (syncText) syncText.textContent = 'Sincronizando...';
+
+    try {
+        // 1. Atualiza indexação de imagens do servidor
+        try {
+            await fetch('/api/refresh-images', { method: 'POST' });
+        } catch (e) {}
+
+        // 2. Recarrega o mapa de imagens
+        await loadImageMap();
+
+        // 3. Força leitura da planilha Google Sheets
+        await syncGoogleSheets(false);
+
+        // Feedback de sucesso
+        if (syncText) syncText.textContent = '✔ Sincronizado!';
+        if (syncIcon) syncIcon.classList.remove('fa-spin');
+
+        showToast('Planilha e fotos atualizadas com sucesso!');
+    } catch (err) {
+        if (syncText) syncText.textContent = 'Erro ao Sincronizar';
+        if (syncIcon) syncIcon.classList.remove('fa-spin');
+    }
+
+    setTimeout(() => {
+        if (syncText) syncText.textContent = 'Sincronizar';
+    }, 2000);
+}
+
+function showToast(message) {
+    let toast = document.getElementById('appGlobalToast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'appGlobalToast';
+        toast.className = 'global-toast';
+        document.body.appendChild(toast);
+    }
+    toast.innerHTML = `<i class="fa-solid fa-circle-check"></i> <span>${escapeHTML(message)}</span>`;
+    toast.classList.add('show');
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
+window.triggerForceSync = triggerForceSync;
+/**
+ * ==========================================================================
+ * GOOGLE SHEETS LIVE SYNC
+ * ==========================================================================
+ */
+async function syncGoogleSheets(silent = false) {
+    try {
+        let csvText = '';
+
+        // 1. Tenta API do próprio backend (evita bloqueios de CORS)
+        try {
+            const apiRes = await fetch('/api/sheet-data', { cache: 'no-store' });
+            if (apiRes.ok) {
+                const text = await apiRes.text();
+                if (text && text.length > 20) csvText = text;
+            }
+        } catch (e) {}
+
+        // 2. Fallback direto para o Google Sheets GViz
+        if (!csvText) {
+            try {
+                const gRes = await fetch(GOOGLE_SHEET_CSV_URL, { cache: 'no-store' });
+                if (gRes.ok) {
+                    const text = await gRes.text();
+                    if (text && text.length > 20) csvText = text;
+                }
+            } catch (e) {}
+        }
+
+        // 3. Fallback export CSV
+        if (!csvText) {
+            try {
+                const gRes2 = await fetch(GOOGLE_SHEET_FALLBACK_URL, { cache: 'no-store' });
+                if (gRes2.ok) {
+                    const text = await gRes2.text();
+                    if (text && text.length > 20) csvText = text;
+                }
+            } catch (e) {}
+        }
+
+        if (csvText) {
+            const parsed = parseGoogleSheetCSV(csvText);
+            if (parsed && parsed.length > 0) {
+                state.allProducts = parsed;
+                extractRooms();
+                applyFilters();
+                renderWelcomeRooms();
+                updateCounterLabels();
+                state.lastSync = new Date();
+                
+                // Se já estiver na tela de apresentação, atualiza em tempo real!
+                if (state.currentScreen === 'presentation') {
+                    if (state.currentView === 'showcase') {
+                        renderShowcaseView();
+                    } else {
+                        renderListView();
+                    }
+                }
+
+                const pill = document.getElementById('welcomeSyncText');
+                if (pill) pill.textContent = `Planilha Atualizada (${state.lastSync.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`;
+            }
+        }
+    } catch (err) {
+        if (!silent) console.warn('Sync falhou, usando dados de cache:', err);
+    }
+}
+
+function parseGoogleSheetCSV(csvText) {
+    const lines = parseCSVRows(csvText);
+    if (lines.length < 2) return null;
+
+    const headers = lines[0].map(h => (h || '').trim().toLowerCase());
+    
+    const colSala = headers.findIndex(h => h.includes('sala'));
+    const colProd = headers.findIndex(h => h.includes('prod') || h.includes('ref') || h.includes('item'));
+    const colPreco = headers.findIndex(h => (h.includes('custo') && h.includes('princ')) || (h.includes('pre') && h.includes('princ')) || h.includes('principal') || h.includes('custo') || h.includes('pre'));
+    const colObs = headers.findIndex(h => h.includes('obs') || h.includes('observ'));
+    const colMarkup = headers.findIndex(h => h.includes('markup') || h.includes('mkp') || h.includes('margem'));
+    const colPdv = headers.findIndex(h => h.includes('pdv') || h.includes('sugest') || h.includes('varejo'));
+
+    const varCols = [];
+    for (let i = 1; i <= 4; i++) {
+        const nameIdx = headers.findIndex(h => (h.includes('varia') || h.includes('opcao') || h.includes('opção')) && h.includes(`${i}`));
+        if (nameIdx !== -1) {
+            let priceIdx = nameIdx + 1;
+            varCols.push({ nameIdx, priceIdx, num: i });
+        }
+    }
+
+    const products = [];
+    let idCounter = 1;
+
+    for (let r = 1; r < lines.length; r++) {
+        const row = lines[r];
+        if (!row || row.length === 0) continue;
+
+        const prodCode = (colProd >= 0 && row[colProd]) ? row[colProd].trim() : '';
+        if (!prodCode) continue;
+
+        const sala = (colSala >= 0 && row[colSala]) ? row[colSala].trim() : 'SALA';
+        const obs = (colObs >= 0 && row[colObs]) ? row[colObs].trim() : '';
+        
+        const precoStr = (colPreco >= 0 && row[colPreco]) ? row[colPreco] : '0';
+        const precoNum = parseCurrency(precoStr);
+
+        const markupStr = (colMarkup >= 0 && row[colMarkup]) ? row[colMarkup].replace(',', '.') : '';
+        const markup = parseFloat(markupStr) || 2.5;
+
+        const pdvStr = (colPdv >= 0 && row[colPdv]) ? row[colPdv] : '';
+        let pdvNum = parseCurrency(pdvStr);
+        if (pdvNum === 0 && precoNum > 0) {
+            pdvNum = Number((precoNum * markup).toFixed(2));
+        }
+
+        const variacoes = [];
+        varCols.forEach((vCol) => {
+            const vName = (row[vCol.nameIdx] || '').trim();
+            const vPriceStr = (row[vCol.priceIdx] || '').trim();
+            if (vName) {
+                const vPrice = parseCurrency(vPriceStr) || precoNum;
+                variacoes.push({
+                    nome: vName,
+                    preco: vPrice,
+                    precoFormatted: formatCurrency(vPrice)
+                });
+            }
+        });
+
+        const prodItem = {
+            id: idCounter++,
+            sala: sala,
+            produto: prodCode,
+            precoPrincipal: precoNum,
+            precoPrincipalFormatted: formatCurrency(precoNum),
+            obs: obs,
+            markup: markup,
+            pdvSugerido: pdvNum,
+            pdvFormatted: formatCurrency(pdvNum),
+            variacoes: variacoes
+        };
+
+        // Aplica overrides locais se existirem
+        try {
+            const stored = localStorage.getItem('oneda_product_overrides');
+            if (stored) {
+                const overrides = JSON.parse(stored);
+                const ov = overrides[prodCode.toUpperCase()];
+                if (ov) {
+                    if (ov.custoPrincipal !== undefined) {
+                        prodItem.precoPrincipal = ov.custoPrincipal;
+                        prodItem.precoPrincipalFormatted = formatCurrency(ov.custoPrincipal);
+                    }
+                    if (ov.markup !== undefined) prodItem.markup = ov.markup;
+                    if (ov.pdvSugerido !== undefined) {
+                        prodItem.pdvSugerido = ov.pdvSugerido;
+                        prodItem.pdvFormatted = formatCurrency(ov.pdvSugerido);
+                    }
+                    if (ov.obs !== undefined) prodItem.obs = ov.obs;
+                    if (ov.variacoes !== undefined) prodItem.variacoes = ov.variacoes;
+                }
+            }
+        } catch (e) {}
+
+        products.push(prodItem);
+    }
+
+    return products;
+}
+
+function parseCSVRows(text) {
+    const rows = [];
+    let currentRow = [];
+    let currentCell = '';
+    let insideQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const nextChar = text[i + 1];
+
+        if (char === '"') {
+            if (insideQuotes && nextChar === '"') {
+                currentCell += '"';
+                i++;
+            } else {
+                insideQuotes = !insideQuotes;
+            }
+        } else if (char === ',' && !insideQuotes) {
+            currentRow.push(currentCell);
+            currentCell = '';
+        } else if ((char === '\r' || char === '\n') && !insideQuotes) {
+            if (char === '\r' && nextChar === '\n') i++;
+            currentRow.push(currentCell);
+            if (currentRow.some(c => c.trim().length > 0)) rows.push(currentRow);
+            currentRow = [];
+            currentCell = '';
+        } else {
+            currentCell += char;
+        }
+    }
+
+    if (currentCell || currentRow.length > 0) {
+        currentRow.push(currentCell);
+        if (currentRow.some(c => c.trim().length > 0)) rows.push(currentRow);
+    }
+
+    return rows;
+}
+
+/**
+ * ==========================================================================
+ * CARREGAMENTO E MANIPULAÇÃO DE IMAGENS
+ * ==========================================================================
+ */
+function loadImageWithFallbackCascade(imgEl, placeholderEl, fallbackText, sku) {
+    if (!sku) {
+        imgEl.style.display = 'none';
+        placeholderEl.style.display = 'flex';
+        return;
+    }
+
+    const cleanSku = sku.trim();
+    const baseSku = cleanSku.replace(/[A-Za-z]+$/, '').trim();
+
+    if (manualUploadsMap[cleanSku]) {
+        imgEl.style.display = 'block';
+        placeholderEl.style.display = 'none';
+        imgEl.src = manualUploadsMap[cleanSku];
+        return;
+    }
+
+    const candidates = [];
+    if (imageMap && imageMap[cleanSku.toUpperCase()]) {
+        candidates.push(`images/${imageMap[cleanSku.toUpperCase()]}`);
+    }
+    if (imageMap && imageMap[baseSku.toUpperCase()]) {
+        candidates.push(`images/${imageMap[baseSku.toUpperCase()]}`);
+    }
+
+    const exts = ['.jpg', '.png', '.webp', '.jpeg', '.JPG', '.PNG', '.WEBP', '.JPEG'];
+    exts.forEach(ext => candidates.push(`images/${cleanSku}${ext}`));
+    if (baseSku && baseSku !== cleanSku) {
+        exts.forEach(ext => candidates.push(`images/${baseSku}${ext}`));
+    }
+
+    const uniqueCandidates = [...new Set(candidates)];
+    let currentIdx = 0;
+
+    function tryNext() {
+        if (currentIdx < uniqueCandidates.length) {
+            imgEl.src = uniqueCandidates[currentIdx++];
+        } else {
+            imgEl.style.display = 'none';
+            placeholderEl.style.display = 'flex';
+            if (fallbackText) fallbackText.textContent = cleanSku;
+        }
+    }
+
+    imgEl.onload = () => {
+        imgEl.style.display = 'block';
+        placeholderEl.style.display = 'none';
+    };
+    imgEl.onerror = () => tryNext();
+    tryNext();
+}
+
+function getProductImageUrl(sku) {
+    if (!sku) return 'images/placeholder.jpg';
+    const cleanSku = sku.trim();
+    const baseSku = cleanSku.replace(/[A-Za-z]+$/, '').trim();
+
+    if (manualUploadsMap[cleanSku]) return manualUploadsMap[cleanSku];
+    if (imageMap && imageMap[cleanSku.toUpperCase()]) return `images/${imageMap[cleanSku.toUpperCase()]}`;
+    if (imageMap && imageMap[baseSku.toUpperCase()]) return `images/${imageMap[baseSku.toUpperCase()]}`;
+    return `images/${cleanSku}.jpg`;
+}
+
+function handleCardImgError(imgEl, sku) {
+    const cleanSku = sku.trim();
+    const baseSku = cleanSku.replace(/[A-Za-z]+$/, '').trim();
+    if (manualUploadsMap[cleanSku]) {
+        imgEl.src = manualUploadsMap[cleanSku];
+        return;
+    }
+
+    const exts = ['.png', '.webp', '.jpeg', '.JPG', '.PNG'];
+    let idx = 0;
+    imgEl.onerror = () => {
+        if (idx < exts.length) {
+            imgEl.src = `images/${cleanSku}${exts[idx++]}`;
+        } else if (baseSku && baseSku !== cleanSku && !imgEl.dataset.triedBase) {
+            imgEl.dataset.triedBase = 'true';
+            imgEl.src = `images/${baseSku}.jpg`;
+        } else {
+            imgEl.parentElement.innerHTML = `
+                <div class="image-placeholder" style="display:flex;">
+                    <i class="fa-regular fa-image" style="font-size:24px;"></i>
+                    <small style="color:var(--text-muted);">${escapeHTML(sku)}</small>
+                </div>
+            `;
+        }
+    };
+    imgEl.src = `images/${cleanSku}${exts[idx++]}`;
+}
+
+function handleThumbImgError(imgEl) {
+    imgEl.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="%2364748b" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>';
+}
+
+function setManualProductImage(sku, dataUrl) {
+    if (!sku || !dataUrl) return;
+    manualUploadsMap[sku] = dataUrl;
+    try {
+        localStorage.setItem('oneda_manual_images', JSON.stringify(manualUploadsMap));
+    } catch (e) {}
+    renderPresentationScreen();
+}
+
+function parseCurrency(str) {
+    if (!str) return 0;
+    const clean = str.toString().replace(/R\$/g, '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+    return parseFloat(clean) || 0;
+}
+
+function formatCurrency(val) {
+    return (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function escapeHTML(str) {
+    if (!str) return '';
+    return str.toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
