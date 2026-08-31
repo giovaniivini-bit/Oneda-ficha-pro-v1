@@ -11,6 +11,10 @@ const SPREADSHEET_ID = '1fX27pHe53zhNf3hb9-RZCi3E0DoU5pY0I93nwM_2o-Y';
 const GOOGLE_SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
 const GOOGLE_SHEET_FALLBACK_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv`;
 
+// URL do Webhook do Google Apps Script para salvar dados de volta na planilha
+// Para gerar essa URL, siga as instruções no arquivo google_apps_script.js
+const GOOGLE_APPS_SCRIPT_WEBHOOK_URL = ''; 
+
 // Dados Iniciais: array vazio - dados reais vêm da planilha Google Sheets
 const INITIAL_FALLBACK_PRODUCTS = [];
 
@@ -1031,13 +1035,28 @@ async function handleSaveEditProduct(e) {
     };
 
     try {
+        // 1. Salva no backend local (product_overrides.json)
         await fetch('/api/update-product', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
+
+        // 2. Salva direto na planilha do Google via Webhook (Apps Script)
+        if (GOOGLE_APPS_SCRIPT_WEBHOOK_URL) {
+            await fetch(GOOGLE_APPS_SCRIPT_WEBHOOK_URL, {
+                method: 'POST',
+                mode: 'no-cors', // Evita bloqueio de CORS do Google Apps Script
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            console.log('Dados enviados para a planilha via Webhook!');
+        } else {
+            console.warn('URL do Webhook (GOOGLE_APPS_SCRIPT_WEBHOOK_URL) não configurada! A planilha não será atualizada.');
+            alert('Atenção: A URL do Webhook do Google Apps Script não foi configurada. As alterações foram salvas localmente, mas não foram para a planilha principal.');
+        }
     } catch (err) {
-        console.warn('Sync com backend falhou:', err);
+        console.warn('Sync com backend/webhook falhou:', err);
     }
 
     // Atualiza a tela imediatamente
