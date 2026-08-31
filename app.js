@@ -1156,6 +1156,19 @@ function applyImageSize(widthPx) {
     const h = Math.round(w * 0.75); // Proporção 4:3
     document.documentElement.style.setProperty('--list-thumb-width', `${w}px`);
     document.documentElement.style.setProperty('--list-thumb-height', `${h}px`);
+    
+    let styleTag = document.getElementById('dynamic-list-styles');
+    if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = 'dynamic-list-styles';
+        document.head.appendChild(styleTag);
+    }
+    styleTag.innerHTML = `
+        .products-table-header, .table-list-row {
+            grid-template-columns: ${w + 16}px 1.3fr 2.3fr 1fr 1.2fr !important;
+        }
+    `;
+
     const sizeLabel = document.getElementById('imgSizeValLabel');
     if (sizeLabel) sizeLabel.textContent = `${w}px`;
 }
