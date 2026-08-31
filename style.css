@@ -618,6 +618,11 @@ body {
     font-size: 12px;
 }
 
+:root {
+    --list-thumb-width: 120px;
+    --list-thumb-height: 90px;
+}
+
 /* ==========================================================================
    BARRA DE FILTROS SUPERIOR DA TELA DE LISTA
    ========================================================================== */
@@ -637,7 +642,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 5px;
-    min-width: 170px;
+    min-width: 160px;
     flex: 1;
 }
 .filter-item-group label {
@@ -677,6 +682,62 @@ body {
     color: #ffffff;
 }
 
+/* Slider de Tamanho da Miniatura */
+.filter-size-group {
+    min-width: 190px;
+}
+.range-slider-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: var(--radius-sm);
+    padding: 7px 12px;
+}
+.range-bound-tag {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+.custom-range-slider {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.15);
+    outline: none;
+    cursor: pointer;
+}
+.custom-range-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent-cyan);
+    cursor: pointer;
+    box-shadow: 0 0 8px var(--accent-cyan);
+    transition: transform 0.15s;
+}
+.custom-range-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+/* Botão Imprimir no Header */
+.action-btn-print {
+    background: rgba(59, 130, 246, 0.15) !important;
+    border: 1px solid rgba(59, 130, 246, 0.4) !important;
+    color: #60a5fa !important;
+}
+.action-btn-print:hover {
+    background: rgba(59, 130, 246, 0.3) !important;
+    border-color: #60a5fa !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 16px rgba(59, 130, 246, 0.4) !important;
+}
+
 /* ==========================================================================
    TABELA / LISTA MODERNA DE PRODUTOS COM MINIATURAS
    ========================================================================== */
@@ -692,7 +753,7 @@ body {
 }
 .products-table-header {
     display: grid;
-    grid-template-columns: 130px 1.4fr 2.4fr 1.1fr 1.2fr;
+    grid-template-columns: calc(var(--list-thumb-width) + 16px) 1.3fr 2.3fr 1fr 1.2fr;
     padding: 14px 18px;
     background: rgba(15, 23, 42, 0.9);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -716,7 +777,7 @@ body {
 }
 .table-list-row {
     display: grid;
-    grid-template-columns: 130px 1.4fr 2.4fr 1.1fr 1.2fr;
+    grid-template-columns: calc(var(--list-thumb-width) + 16px) 1.3fr 2.3fr 1fr 1.2fr;
     padding: 8px 18px;
     align-items: center;
     gap: 16px;
@@ -732,8 +793,8 @@ body {
     border-color: rgba(6, 182, 212, 0.35);
 }
 .row-thumb-box {
-    width: 120px;
-    height: 90px;
+    width: var(--list-thumb-width);
+    height: var(--list-thumb-height);
     background: #080c16;
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -743,10 +804,10 @@ body {
     overflow: hidden;
     padding: 4px;
     margin: 0 auto;
-    transition: transform 0.2s ease;
+    transition: transform 0.2s ease, width 0.2s ease, height 0.2s ease;
 }
 .table-list-row:hover .row-thumb-box {
-    transform: scale(1.05);
+    transform: scale(1.04);
     border-color: var(--accent-cyan);
 }
 .row-thumb-img {
@@ -1578,6 +1639,279 @@ body {
     background: linear-gradient(135deg, #34d399, #10b981);
     box-shadow: 0 6px 24px rgba(16, 185, 129, 0.6);
     transform: translateY(-1px);
+}
+
+/* ==========================================================================
+   MODAL DE OPÇÕES DE IMPRESSÃO & PDF
+   ========================================================================== */
+.print-modal-card {
+    max-width: 560px !important;
+}
+.print-modal-body {
+    padding: 16px 20px;
+}
+.print-choice-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.print-choice-card:hover {
+    background: rgba(30, 41, 59, 0.9);
+    border-color: var(--accent-cyan);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.print-choice-card.highlight {
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.4);
+}
+.print-choice-card.highlight:hover {
+    background: rgba(16, 185, 129, 0.22);
+    border-color: var(--accent-emerald);
+}
+.print-choice-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: var(--accent-cyan);
+    flex-shrink: 0;
+}
+.print-choice-card.highlight .print-choice-icon {
+    color: var(--accent-emerald);
+}
+.print-choice-text {
+    flex: 1;
+}
+.print-choice-title {
+    font-family: 'Outfit', sans-serif;
+    font-size: 15px;
+    font-weight: 800;
+    color: #ffffff;
+    margin-bottom: 4px;
+}
+.print-choice-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.print-only-area {
+    display: none;
+}
+
+/* ==========================================================================
+   REGRAS DE IMPRESSÃO PROFISSIONAL (@media print)
+   ========================================================================== */
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 10mm;
+    }
+    html, body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        font-family: 'Inter', sans-serif !important;
+    }
+    .ambient-glow,
+    #screenWelcome,
+    .presentation-header,
+    .list-filters-bar,
+    .list-stats-bar,
+    .modal-overlay,
+    .global-toast,
+    .view-showcase,
+    .products-table-wrapper,
+    .showcase-fixed-stage,
+    .showcase-bottom-obs-row {
+        display: none !important;
+    }
+    .print-only-area {
+        display: block !important;
+        width: 100% !important;
+    }
+    .print-page-sheet {
+        page-break-after: always !important;
+        break-after: page !important;
+        page-break-inside: avoid !important;
+        width: 100% !important;
+        height: 270mm !important;
+        box-sizing: border-box !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border-bottom: 1px dashed #cbd5e1 !important;
+        padding: 10mm 0 !important;
+    }
+    .print-page-sheet:last-child {
+        page-break-after: auto !important;
+        break-after: auto !important;
+        border-bottom: none !important;
+    }
+    .print-sheet-header {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        border-bottom: 2px solid #0f172a !important;
+        padding-bottom: 10px !important;
+        margin-bottom: 16px !important;
+    }
+    .print-sheet-brand {
+        font-family: 'Outfit', sans-serif !important;
+        font-size: 24px !important;
+        font-weight: 900 !important;
+        color: #0f172a !important;
+        letter-spacing: 0.5px !important;
+    }
+    .print-sheet-room {
+        font-size: 13px !important;
+        font-weight: 800 !important;
+        padding: 4px 12px !important;
+        border: 1.5px solid #0f172a !important;
+        border-radius: 6px !important;
+        text-transform: uppercase !important;
+    }
+    .print-sheet-body {
+        display: grid !important;
+        grid-template-columns: 1.25fr 1fr !important;
+        gap: 20px !important;
+        flex: 1 !important;
+        align-items: stretch !important;
+    }
+    .print-photo-col {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 8px !important;
+        padding: 10px !important;
+        background: #ffffff !important;
+        max-height: 480px !important;
+    }
+    .print-photo-col img {
+        max-width: 100% !important;
+        max-height: 460px !important;
+        object-fit: contain !important;
+    }
+    .print-info-col {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 12px !important;
+    }
+    .print-meta-box {
+        border-bottom: 1.5px solid #e2e8f0 !important;
+        padding-bottom: 10px !important;
+    }
+    .print-meta-sku {
+        font-family: 'Outfit', sans-serif !important;
+        font-size: 26px !important;
+        font-weight: 900 !important;
+        color: #0f172a !important;
+    }
+    .print-meta-desc {
+        font-size: 15px !important;
+        font-weight: 700 !important;
+        color: #334155 !important;
+        margin-top: 2px !important;
+    }
+    .print-prices-box {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 12px !important;
+        background: #f8fafc !important;
+        border: 1px solid #e2e8f0 !important;
+        padding: 12px !important;
+        border-radius: 8px !important;
+    }
+    .print-price-col { display: flex !important; flex-direction: column !important; }
+    .print-price-lbl {
+        font-size: 10px !important;
+        text-transform: uppercase !important;
+        font-weight: 800 !important;
+        color: #64748b !important;
+    }
+    .print-cost-num {
+        font-family: 'Outfit', sans-serif !important;
+        font-size: 22px !important;
+        font-weight: 900 !important;
+        color: #047857 !important;
+    }
+    .print-pdv-num {
+        font-family: 'Outfit', sans-serif !important;
+        font-size: 22px !important;
+        font-weight: 900 !important;
+        color: #b45309 !important;
+    }
+    .print-vars-box {
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 8px !important;
+        overflow: hidden !important;
+    }
+    .print-vars-title {
+        background: #f1f5f9 !important;
+        padding: 6px 10px !important;
+        font-size: 11px !important;
+        font-weight: 800 !important;
+        text-transform: uppercase !important;
+        color: #475569 !important;
+    }
+    .print-vars-table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+    }
+    .print-vars-table td {
+        padding: 6px 10px !important;
+        border-top: 1px solid #f1f5f9 !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+    }
+    .print-vars-table td:last-child {
+        text-align: right !important;
+        font-weight: 800 !important;
+        color: #0f172a !important;
+    }
+    .print-obs-sheet {
+        background: #f8fafc !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 8px !important;
+        padding: 10px !important;
+        margin-top: auto !important;
+    }
+    .print-obs-lbl {
+        font-size: 10px !important;
+        font-weight: 800 !important;
+        text-transform: uppercase !important;
+        color: #64748b !important;
+        margin-bottom: 2px !important;
+    }
+    .print-obs-val {
+        font-size: 12px !important;
+        color: #1e293b !important;
+    }
+    .print-sheet-footer {
+        border-top: 1px solid #e2e8f0 !important;
+        padding-top: 8px !important;
+        margin-top: 12px !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        font-size: 10px !important;
+        color: #94a3b8 !important;
+    }
 }
 
 /* Responsividade */

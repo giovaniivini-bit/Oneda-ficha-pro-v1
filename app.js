@@ -803,6 +803,21 @@ function setupEventListeners() {
     const modalInput = document.getElementById('modalSearchInput');
     modalInput.addEventListener('input', (e) => renderQuickSearchResults(e.target.value));
 
+    // Controle de Tamanho de Imagem na Lista
+    setupImageSizeControl();
+
+    // Modal de Impressão / PDF
+    const btnOpenPrint = document.getElementById('btnOpenPrintModal');
+    if (btnOpenPrint) btnOpenPrint.addEventListener('click', openPrintModal);
+    const btnClosePrint = document.getElementById('btnClosePrintModal');
+    if (btnClosePrint) btnClosePrint.addEventListener('click', closePrintModal);
+    const printModal = document.getElementById('printModal');
+    if (printModal) {
+        printModal.addEventListener('click', (e) => {
+            if (e.target.id === 'printModal') closePrintModal();
+        });
+    }
+
     // Modal de Edição de Ficha (Lápis Verde)
     document.getElementById('btnOpenEditProduct').addEventListener('click', openEditProductModal);
     document.getElementById('btnCloseEditModal').addEventListener('click', closeEditProductModal);
@@ -1118,16 +1133,168 @@ function renderQuickSearchResults(query) {
 
 /**
  * ==========================================================================
- * FORÇAR SINCRONIZAÇÃO (PLANILHA + FOTOS)
+ * CONTROLE DE TAMANHO DA FOTO NA LISTA (50% a 200%)
+ * ==========================================================================
+ */
+function setupImageSizeControl() {
+    const sizeSlider = document.getElementById('listImgSizeRange');
+    if (!sizeSlider) return;
+
+    const savedSize = localStorage.getItem('oneda_list_thumb_size') || '120';
+    sizeSlider.value = savedSize;
+    applyImageSize(savedSize);
+
+    sizeSlider.addEventListener('input', (e) => {
+        const val = e.target.value;
+        applyImageSize(val);
+        localStorage.setItem('oneda_list_thumb_size', val);
+    });
+}
+
+function applyImageSize(widthPx) {
+    const w = parseInt(widthPx, 10) || 120;
+    const h = Math.round(w * 0.75); // Proporção 4:3
+    document.documentElement.style.setProperty('--list-thumb-width', `${w}px`);
+    document.documentElement.style.setProperty('--list-thumb-height', `${h}px`);
+    const sizeLabel = document.getElementById('imgSizeValLabel');
+    if (sizeLabel) sizeLabel.textContent = `${w}px`;
+}
+
+/**
+ * ==========================================================================
+ * SISTEMA DE IMPRESSÃO & EXPORTAÇÃO PDF (1 POR FOLHA OU LISTA)
+ * ==========================================================================
+ */
+function openPrintModal() {
+    const modal = document.getElementById('printModal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closePrintModal() {
+    const modal = document.getElementById('printModal');
+    if (modal) modal.style.display = 'none';
+}
+
+window.openPrintModal = openPrintModal;
+window.closePrintModal = closePrintModal;
+window.executePrint = executePrint;
+
+function executePrint(mode) {
+    closePrintModal();
+    const printArea = document.getElementById('printArea');
+    if (!printArea) return;
+
+    let productsToPrint = [];
+    if (mode === 'current') {
+        const current = state.filteredProducts[state.currentIndex];
+        if (current) productsToPrint = [current];
+    } else if (mode === 'room') {
+        // Imprime todos os produtos da sala selecionada (ou lista filtrada)
+        productsToPrint = [...state.filteredProducts];
+    } else if (mode === 'list') {
+        // Abre a impressão direta da página no modo tabela
+        setTimeout(() => { window.print(); }, 200);
+        return;
+    }
+
+    if (productsToPrint.length === 0) {
+        alert('Nenhum produto disponível para impressão!');
+        return;
+    }
+
+    // Gera o HTML de 1 folha A4 para cada produto
+    let html = '';
+    productsToPrint.forEach((p, idx) => {
+        const imgUrl = getProductImageUrl(p.produto);
+        const markupVal = state.listSimulateMarkup !== 'none' ? parseFloat(state.listSimulateMarkup) : (p.markup || 2.5);
+        const pdvVal = p.pdvSugerido || (p.precoPrincipal * markupVal);
+
+        let varsHTML = '';
+        if (p.variacoes && p.variacoes.length > 0) {
+            varsHTML = `
+                <div class="print-vars-box">
+                    <div class="print-vars-title">Opções / Variações do Produto</div>
+                    <table class="print-vars-table">
+                        ${p.variacoes.map((v, vIdx) => `
+                            <tr>
+                                <td><strong>Variação ${vIdx + 1}:</strong> ${escapeHTML(v.nome)}</td>
+                                <td>${v.precoFormatted || formatCurrency(v.preco)}</td>
+                            </tr>
+                        `).join('')}
+                    </table>
+                </div>
+            `;
+        }
+
+        html += `
+            <div class="print-page-sheet">
+                <div class="print-sheet-header">
+                    <div class="print-sheet-brand">ONEDA <span>FICHA PRO</span></div>
+                    <div class="print-sheet-room">${escapeHTML(p.sala || 'MOSTRUÁRIO')}</div>
+                </div>
+
+                <div class="print-sheet-body">
+                    <div class="print-photo-col">
+                        <img src="${imgUrl}" alt="${p.produto}">
+                    </div>
+
+                    <div class="print-info-col">
+                        <div class="print-meta-box">
+                            <div class="print-meta-sku">${escapeHTML(p.produto)}</div>
+                            <div class="print-meta-desc">${escapeHTML(p.descricao || '')}</div>
+                        </div>
+
+                        <div class="print-prices-box">
+                            <div class="print-price-col">
+                                <span class="print-price-lbl">Custo Principal</span>
+                                <span class="print-cost-num">${p.precoPrincipalFormatted || formatCurrency(p.precoPrincipal)}</span>
+                            </div>
+                            <div class="print-price-col">
+                                <span class="print-price-lbl">PDV Sugerido (${markupVal}x)</span>
+                                <span class="print-pdv-num">${formatCurrency(pdvVal)}</span>
+                            </div>
+                        </div>
+
+                        ${varsHTML}
+
+                        <div class="print-obs-sheet">
+                            <div class="print-obs-lbl">Observações Técnicas:</div>
+                            <div class="print-obs-val">${escapeHTML(p.obs || 'Nenhuma observação informada.')}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="print-sheet-footer">
+                    <span>Catálogo Comercial Oficial • Oneda Ficha Pro</span>
+                    <span>Folha ${idx + 1} de ${productsToPrint.length} • Sala: ${escapeHTML(p.sala || 'Geral')} • Gerado em ${new Date().toLocaleDateString('pt-BR')}</span>
+                </div>
+            </div>
+        `;
+    });
+
+    printArea.innerHTML = html;
+
+    // Dispara a janela de impressão nativa
+    setTimeout(() => {
+        window.print();
+    }, 300);
+}
+
+/**
+ * ==========================================================================
+ * FORÇAR SINCRONIZAÇÃO (PLANILHA + FOTOS) - TELA 1 E TELA 2
  * ==========================================================================
  */
 async function triggerForceSync() {
-    const syncBtn = document.getElementById('btnForceSync');
     const syncIcon = document.getElementById('syncIcon');
     const syncText = document.getElementById('syncBtnText');
+    const welcomeIcon = document.getElementById('welcomeSyncBtnIcon');
+    const welcomeText = document.getElementById('welcomeSyncBtnLabel');
 
     if (syncIcon) syncIcon.classList.add('fa-spin');
     if (syncText) syncText.textContent = 'Sincronizando...';
+    if (welcomeIcon) welcomeIcon.classList.add('fa-spin');
+    if (welcomeText) welcomeText.textContent = 'Sincronizando...';
 
     try {
         // 1. Atualiza indexação de imagens do servidor
@@ -1141,18 +1308,32 @@ async function triggerForceSync() {
         // 3. Força leitura da planilha Google Sheets
         await syncGoogleSheets(false);
 
+        // 4. Re-renderiza a tela ativa
+        if (state.currentScreen === 'presentation') {
+            if (state.currentView === 'showcase') {
+                renderShowcaseView();
+            } else {
+                renderListView();
+            }
+        }
+
         // Feedback de sucesso
         if (syncText) syncText.textContent = '✔ Sincronizado!';
         if (syncIcon) syncIcon.classList.remove('fa-spin');
+        if (welcomeText) welcomeText.textContent = '✔ Sincronizado!';
+        if (welcomeIcon) welcomeIcon.classList.remove('fa-spin');
 
-        showToast('Planilha e fotos atualizadas com sucesso!');
+        showToast('Planilha e 329+ fotos sincronizadas com sucesso!');
     } catch (err) {
         if (syncText) syncText.textContent = 'Erro ao Sincronizar';
         if (syncIcon) syncIcon.classList.remove('fa-spin');
+        if (welcomeText) welcomeText.textContent = 'Erro';
+        if (welcomeIcon) welcomeIcon.classList.remove('fa-spin');
     }
 
     setTimeout(() => {
         if (syncText) syncText.textContent = 'Sincronizar';
+        if (welcomeText) welcomeText.textContent = 'Sincronizar';
     }, 2000);
 }
 

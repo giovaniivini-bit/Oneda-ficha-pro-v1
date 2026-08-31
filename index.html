@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
     <!-- Estilos -->
-    <link rel="stylesheet" href="style.css?v=9.0.0">
+    <link rel="stylesheet" href="style.css?v=10.0.0">
 </head>
 <body class="theme-dark">
     <!-- Efeitos de Fundo Luminoso (Ambient Mesh Glow) -->
@@ -35,10 +35,15 @@
                 </div>
                 <h1 class="welcome-title">ONEDA <span>FICHA PRO</span></h1>
                 <p class="welcome-subtitle">Apresentação Comercial & Catálogo de Produtos</p>
-                <div class="welcome-sync-pill" id="welcomeSyncPill" onclick="triggerForceSync()" title="Clique para forçar sincronização imediata">
-                    <span class="pulse-dot"></span>
-                    <span id="welcomeSyncText">Sincronizado com Google Sheets</span>
-                    <i class="fa-solid fa-rotate" style="font-size: 11px; margin-left: 4px;"></i>
+                <div class="welcome-header-actions" style="display: flex; gap: 12px; align-items: center; justify-content: center; margin-top: 12px; flex-wrap: wrap;">
+                    <div class="welcome-sync-pill" id="welcomeSyncPill" onclick="triggerForceSync()" title="Status da sincronização">
+                        <span class="pulse-dot"></span>
+                        <span id="welcomeSyncText">Sincronizado com Google Sheets</span>
+                    </div>
+                    <button class="action-btn-sync" id="btnWelcomeSync" onclick="triggerForceSync()" title="Forçar sincronização de dados e fotos">
+                        <i class="fa-solid fa-rotate" id="welcomeSyncBtnIcon"></i>
+                        <span id="welcomeSyncBtnLabel">Sincronizar</span>
+                    </button>
                 </div>
             </div>
 
@@ -153,6 +158,11 @@
                     <span id="syncBtnText">Sincronizar</span>
                 </button>
 
+                <button class="action-btn action-btn-print" id="btnOpenPrintModal" onclick="openPrintModal()" title="Imprimir Fichas / Catálogo (1 por Folha ou Lista)">
+                    <i class="fa-solid fa-print"></i>
+                    <span>Imprimir</span>
+                </button>
+
                 <button class="action-btn" id="btnUploadImageManual" title="Carregar imagem para o produto ativo">
                     <i class="fa-solid fa-cloud-arrow-up"></i>
                     <span>Foto Manual</span>
@@ -197,6 +207,16 @@
                             <option value="sku-desc">Produto (Z → A)</option>
                             <option value="desc-asc">Descrição (A → Z)</option>
                         </select>
+                    </div>
+
+                    <!-- Controle de Tamanho da Foto (50% a 200%) -->
+                    <div class="filter-item-group filter-size-group">
+                        <label for="listImgSizeRange"><i class="fa-solid fa-image"></i> TAMANHO FOTO: <span id="imgSizeValLabel" style="color: var(--accent-cyan);">120px</span></label>
+                        <div class="range-slider-wrapper">
+                            <span class="range-bound-tag">50%</span>
+                            <input type="range" id="listImgSizeRange" min="60" max="240" value="120" step="10" class="custom-range-slider" title="Ajustar tamanho da foto">
+                            <span class="range-bound-tag">200%</span>
+                        </div>
                     </div>
                 </div>
 
@@ -452,7 +472,51 @@
         </div>
     </div>
 
+    <!-- ================================================================= -->
+    <!-- MODAL DE OPÇÕES DE IMPRESSÃO & PDF                                -->
+    <!-- ================================================================= -->
+    <div class="modal-overlay" id="printModal" style="display: none;">
+        <div class="modal-card print-modal-card">
+            <div class="modal-edit-header">
+                <div class="modal-title"><i class="fa-solid fa-print"></i> Opções de Impressão & Exportação PDF</div>
+                <button class="modal-close-btn" id="btnClosePrintModal" onclick="closePrintModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-edit-body print-modal-body">
+                <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 13px;">
+                    Selecione o formato desejado para enviar à impressora ou salvar em PDF:
+                </p>
+
+                <div class="print-choice-card" onclick="executePrint('current')">
+                    <div class="print-choice-icon"><i class="fa-solid fa-file-image"></i></div>
+                    <div class="print-choice-text">
+                        <div class="print-choice-title">Imprimir Produto Atual (1 por Folha)</div>
+                        <div class="print-choice-desc">Imprime a ficha técnica completa do modelo em exibição em 1 folha A4.</div>
+                    </div>
+                </div>
+
+                <div class="print-choice-card highlight" onclick="executePrint('room')">
+                    <div class="print-choice-icon"><i class="fa-solid fa-layer-group"></i></div>
+                    <div class="print-choice-text">
+                        <div class="print-choice-title">Imprimir Todos os Produtos da Sala (1 por Folha)</div>
+                        <div class="print-choice-desc">Gera o catálogo completo com 1 produto por folha para toda a sala selecionada (ideal para PDF / mostruário).</div>
+                    </div>
+                </div>
+
+                <div class="print-choice-card" onclick="executePrint('list')">
+                    <div class="print-choice-icon"><i class="fa-solid fa-table-list"></i></div>
+                    <div class="print-choice-text">
+                        <div class="print-choice-title">Imprimir Tabela / Lista Resumida</div>
+                        <div class="print-choice-desc">Imprime a relação completa em formato tabela com fotos, custos e markups.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTAINER OCULTO PARA IMPRESSÃO 1 POR FOLHA EM ALTA DEFINIÇÃO -->
+    <div id="printArea" class="print-only-area"></div>
+
     <!-- Script Principal -->
-    <script src="app.js?v=9.0.0"></script>
+    <script src="app.js?v=10.0.0"></script>
 </body>
 </html>
