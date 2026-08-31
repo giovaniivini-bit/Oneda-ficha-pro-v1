@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
     <!-- Estilos -->
-    <link rel="stylesheet" href="style.css?v=6.0.0">
+    <link rel="stylesheet" href="style.css?v=7.0.0">
 </head>
 <body class="theme-dark">
     <!-- Efeitos de Fundo Luminoso (Ambient Mesh Glow) -->
@@ -127,10 +127,10 @@
                 </div>
             </div>
 
-            <!-- Barra de Busca Rápida -->
+            <!-- Campo de Busca Rápida -->
             <div class="header-search">
                 <i class="fa-solid fa-magnifying-glass search-icon"></i>
-                <input type="text" id="searchInput" placeholder="Buscar por código ou variação (Ctrl + K)..." autocomplete="off">
+                <input type="text" id="searchInput" placeholder="Buscar por código, descrição ou variação (Ctrl + K)..." autocomplete="off">
                 <button class="clear-search-btn" id="btnClearSearch" style="display: none;"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
@@ -191,12 +191,14 @@
             <section class="view-panel view-showcase" id="viewShowcasePanel">
                 <div class="showcase-fixed-stage" id="showcaseFixedStage">
                     
-                    <!-- BARRA SUPERIOR DO STAGE: CÓDIGO SKU + CONTROLES + BOTÃO LÁPIS VERDE -->
+                    <!-- BARRA SUPERIOR DO STAGE: CÓDIGO SKU + DESCRIÇÃO + CONTROLES + BOTÃO LÁPIS VERDE -->
                     <div class="showcase-top-bar">
-                        <!-- Código SKU em Destaque -->
+                        <!-- Código SKU e Descrição em Destaque -->
                         <div class="sku-header-badge">
                             <i class="fa-solid fa-tag"></i>
                             <span id="imgBadgeSku">00.00.00.0000</span>
+                            <span class="sku-desc-sep" id="imgBadgeDescSep" style="display: none;">•</span>
+                            <span class="sku-desc-text" id="imgBadgeDesc" style="display: none;"></span>
                         </div>
 
                         <!-- Ações à Direita: Navegação e Lápis de Edição -->
@@ -344,9 +346,15 @@
             </div>
             
             <form id="editProductForm" class="modal-edit-body">
-                <div class="edit-field-group">
-                    <label>Código da Referência (SKU):</label>
-                    <input type="text" id="editProductSku" readonly class="input-readonly">
+                <div class="edit-grid-2col">
+                    <div class="edit-field-group">
+                        <label>Código da Referência (SKU):</label>
+                        <input type="text" id="editProductSku" readonly class="input-readonly">
+                    </div>
+                    <div class="edit-field-group">
+                        <label>Descrição do Produto:</label>
+                        <input type="text" id="editProductDesc" placeholder="Ex: JARDINEIRA, TOP CURTO...">
+                    </div>
                 </div>
 
                 <div class="edit-grid-2col">
@@ -403,6 +411,6 @@
     </div>
 
     <!-- Script Principal -->
-    <script src="app.js?v=6.0.0"></script>
+    <script src="app.js?v=7.0.0"></script>
 </body>
 </html>

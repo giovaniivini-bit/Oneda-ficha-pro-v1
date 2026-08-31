@@ -42,6 +42,7 @@ function doPost(e) {
     var headers = values[0].map(function(h) { return (h || "").toString().toLowerCase().trim(); });
     
     var colProd = -1;
+    var colDesc = -1;
     var colCusto = -1;
     var colObs = -1;
     var colMarkup = -1;
@@ -52,7 +53,8 @@ function doPost(e) {
     
     for (var c = 0; c < headers.length; c++) {
       var h = headers[c];
-      if (h.indexOf("prod") !== -1 || h.indexOf("ref") !== -1) colProd = c;
+      if (h.indexOf("desc") !== -1 || h.indexOf("descri") !== -1) colDesc = c;
+      else if (h.indexOf("prod") !== -1 || h.indexOf("ref") !== -1) colProd = c;
       else if (h.indexOf("custo") !== -1 || (h.indexOf("pre") !== -1 && h.indexOf("princ") !== -1)) colCusto = c;
       else if (h.indexOf("obs") !== -1) colObs = c;
       else if (h.indexOf("markup") !== -1) colMarkup = c;
@@ -74,6 +76,11 @@ function doPost(e) {
     
     if (rowIndex === -1) {
       return responseJSON({ success: false, error: "Produto não encontrado na planilha: " + targetSku });
+    }
+    
+    // Atualizar Descrição
+    if (colDesc !== -1 && data.descricao !== undefined) {
+      sheet.getRange(rowIndex, colDesc + 1).setValue(data.descricao);
     }
     
     // Atualizar Custo Principal

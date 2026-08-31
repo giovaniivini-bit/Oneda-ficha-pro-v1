@@ -151,11 +151,12 @@ function applyFilters() {
         if (!query) return true;
 
         const skuMatch = p.produto && p.produto.toLowerCase().includes(query);
+        const descMatch = p.descricao && p.descricao.toLowerCase().includes(query);
         const roomMatch2 = p.sala && p.sala.toLowerCase().includes(query);
         const obsMatch = p.obs && p.obs.toLowerCase().includes(query);
         const varMatch = p.variacoes && p.variacoes.some(v => v.nome.toLowerCase().includes(query));
 
-        return skuMatch || roomMatch2 || obsMatch || varMatch;
+        return skuMatch || descMatch || roomMatch2 || obsMatch || varMatch;
     });
 
     if (state.currentIndex >= state.filteredProducts.length) {
@@ -313,6 +314,7 @@ function renderListView() {
             </div>
             <div class="card-body">
                 <div class="card-sku-title">${escapeHTML(product.produto)}</div>
+                ${product.descricao ? `<div class="card-desc-subtitle">${escapeHTML(product.descricao)}</div>` : ''}
                 
                 <div class="card-price-row">
                     <div class="card-price-block">
@@ -347,6 +349,18 @@ function renderShowcaseView() {
 
     // Header & Meta
     document.getElementById('imgBadgeSku').textContent = product.produto || 'SKU';
+    const descBadge = document.getElementById('imgBadgeDesc');
+    const descSep = document.getElementById('imgBadgeDescSep');
+    if (descBadge && descSep) {
+        if (product.descricao && product.descricao.trim()) {
+            descBadge.textContent = product.descricao.trim();
+            descBadge.style.display = 'inline';
+            descSep.style.display = 'inline';
+        } else {
+            descBadge.style.display = 'none';
+            descSep.style.display = 'none';
+        }
+    }
     document.getElementById('showcaseCounterPill').textContent = `${state.currentIndex + 1} / ${state.filteredProducts.length}`;
 
     // Imagem do Produto
@@ -792,6 +806,9 @@ function openEditProductModal() {
     if (!product) return;
 
     document.getElementById('editProductSku').value = product.produto || '';
+    const descField = document.getElementById('editProductDesc');
+    if (descField) descField.value = product.descricao || '';
+
     document.getElementById('editCustoPrincipal').value = (product.precoPrincipal || 0).toFixed(2).replace('.', ',');
     document.getElementById('editMarkup').value = (product.markup || 2.5).toString().replace('.', ',');
     document.getElementById('editObs').value = product.obs || '';
@@ -833,6 +850,9 @@ async function handleSaveEditProduct(e) {
     if (!product) return;
 
     const sku = document.getElementById('editProductSku').value.trim();
+    const descField = document.getElementById('editProductDesc');
+    const descText = descField ? descField.value.trim() : (product.descricao || '');
+
     const custoNum = parseCurrency(document.getElementById('editCustoPrincipal').value);
     const markupNum = parseFloat(document.getElementById('editMarkup').value.replace(',', '.')) || 2.5;
     const obsText = document.getElementById('editObs').value.trim();
@@ -855,6 +875,7 @@ async function handleSaveEditProduct(e) {
     const pdvCalculado = Number((custoNum * markupNum).toFixed(2));
 
     // Atualiza o produto no estado local
+    product.descricao = descText;
     product.precoPrincipal = custoNum;
     product.precoPrincipalFormatted = formatCurrency(custoNum);
     product.markup = markupNum;
@@ -875,6 +896,7 @@ async function handleSaveEditProduct(e) {
         const stored = localStorage.getItem('oneda_product_overrides');
         if (stored) savedOverrides = JSON.parse(stored);
         savedOverrides[sku.toUpperCase()] = {
+            descricao: descText,
             custoPrincipal: custoNum,
             markup: markupNum,
             pdvSugerido: pdvCalculado,
@@ -891,6 +913,7 @@ async function handleSaveEditProduct(e) {
     // Dispara sincronização com o backend / webhook da planilha
     const payload = {
         produto: sku,
+        descricao: descText,
         custoPrincipal: formatCurrency(custoNum),
         markup: markupNum.toString().replace('.', ','),
         pdvSugerido: formatCurrency(pdvCalculado),
@@ -928,10 +951,13 @@ function renderQuickSearchResults(query) {
 
     const matches = state.allProducts.filter(p => {
         if (!q) return true;
-        return (p.produto && p.produto.toLowerCase().includes(q)) ||
-               (p.sala && p.sala.toLowerCase().includes(q)) ||
-               (p.obs && p.obs.toLowerCase().includes(q));
-    }).slice(0, 15);
+        const skuMatch = p.produto && p.produto.toLowerCase().includes(q);
+        const descMatch = p.descricao && p.descricao.toLowerCase().includes(q);
+        const salaMatch = p.sala && p.sala.toLowerCase().includes(q);
+        const obsMatch = p.obs && p.obs.toLowerCase().includes(q);
+        const varMatch = p.variacoes && p.variacoes.some(v => v.nome.toLowerCase().includes(q));
+        return skuMatch || descMatch || salaMatch || obsMatch || varMatch;
+    }).slice(0, 20);
 
     if (matches.length === 0) {
         container.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-muted);">Nenhum produto correspondente</div>`;
@@ -946,13 +972,16 @@ function renderQuickSearchResults(query) {
 
         item.innerHTML = `
             <div style="display: flex; align-items: center; gap: 10px;">
-                <img src="${imgUrl}" alt="${p.produto}" style="width: 38px; height: 38px; object-fit: contain; background: #090c14; border-radius: 4px;" onerror="handleThumbImgError(this)">
+                <img src="${imgUrl}" alt="${p.produto}" style="width: 40px; height: 40px; object-fit: contain; background: #090c14; border-radius: 6px; padding: 2px;" onerror="handleThumbImgError(this)">
                 <div>
-                    <div style="font-weight: 700; color: #fff;">${escapeHTML(p.produto)}</div>
-                    <div style="font-size: 11px; color: var(--accent-cyan);">${escapeHTML(p.sala)}</div>
+                    <div style="font-weight: 800; color: #fff; font-size: 14px;">
+                        ${escapeHTML(p.produto)}
+                        ${p.descricao ? `<span style="font-weight: 600; color: var(--accent-cyan); font-size: 12px; margin-left: 6px;">• ${escapeHTML(p.descricao)}</span>` : ''}
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-secondary);">${escapeHTML(p.sala || 'SALA')} ${p.obs ? `— <span style="color: var(--text-muted);">${escapeHTML(p.obs)}</span>` : ''}</div>
                 </div>
             </div>
-            <div style="font-weight: 800; color: var(--accent-emerald);">${p.precoPrincipalFormatted}</div>
+            <div style="font-weight: 800; color: var(--accent-emerald); font-size: 15px;">${p.precoPrincipalFormatted}</div>
         `;
 
         item.addEventListener('click', () => {
@@ -1109,6 +1138,7 @@ function parseGoogleSheetCSV(csvText) {
     
     const colSala = headers.findIndex(h => h.includes('sala'));
     const colProd = headers.findIndex(h => h.includes('prod') || h.includes('ref') || h.includes('item'));
+    const colDesc = headers.findIndex(h => h.includes('desc') || h.includes('descri'));
     const colPreco = headers.findIndex(h => (h.includes('custo') && h.includes('princ')) || (h.includes('pre') && h.includes('princ')) || h.includes('principal') || h.includes('custo') || h.includes('pre'));
     const colObs = headers.findIndex(h => h.includes('obs') || h.includes('observ'));
     const colMarkup = headers.findIndex(h => h.includes('markup') || h.includes('mkp') || h.includes('margem'));
@@ -1133,7 +1163,8 @@ function parseGoogleSheetCSV(csvText) {
         const prodCode = (colProd >= 0 && row[colProd]) ? row[colProd].trim() : '';
         if (!prodCode) continue;
 
-        const sala = (colSala >= 0 && row[colSala]) ? row[colSala].trim() : 'SALA';
+        const sala = (colSala >= 0 && row[colSala] && row[colSala].trim()) ? row[colSala].trim() : 'GERAL';
+        const descricao = (colDesc >= 0 && row[colDesc]) ? row[colDesc].trim() : '';
         const obs = (colObs >= 0 && row[colObs]) ? row[colObs].trim() : '';
         
         const precoStr = (colPreco >= 0 && row[colPreco]) ? row[colPreco] : '0';
@@ -1166,6 +1197,7 @@ function parseGoogleSheetCSV(csvText) {
             id: idCounter++,
             sala: sala,
             produto: prodCode,
+            descricao: descricao,
             precoPrincipal: precoNum,
             precoPrincipalFormatted: formatCurrency(precoNum),
             obs: obs,
@@ -1182,6 +1214,7 @@ function parseGoogleSheetCSV(csvText) {
                 const overrides = JSON.parse(stored);
                 const ov = overrides[prodCode.toUpperCase()];
                 if (ov) {
+                    if (ov.descricao !== undefined) prodItem.descricao = ov.descricao;
                     if (ov.custoPrincipal !== undefined) {
                         prodItem.precoPrincipal = ov.custoPrincipal;
                         prodItem.precoPrincipalFormatted = formatCurrency(ov.custoPrincipal);
