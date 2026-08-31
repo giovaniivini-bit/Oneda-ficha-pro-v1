@@ -1,0 +1,25 @@
+{
+  "name": "oneda-ficha-pro",
+  "version": "1.0.0",
+  "description": "Aplicativo moderno e de alta performance para apresentação comercial de produtos, fichas técnicas, custos, markups e variações em tempo real, integrado diretamente com o **Google Sheets** e **Google Drive**.",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/giovaniivini-bit/Oneda-ficha-pro-v1.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/giovaniivini-bit/Oneda-ficha-pro-v1/issues"
+  },
+  "homepage": "https://github.com/giovaniivini-bit/Oneda-ficha-pro-v1#readme",
+  "dependencies": {
+    "googleapis": "^176.0.0"
+  }
+}

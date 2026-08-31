@@ -1035,28 +1035,21 @@ async function handleSaveEditProduct(e) {
     };
 
     try {
-        // 1. Salva no backend local (product_overrides.json)
-        await fetch('/api/update-product', {
+        const response = await fetch('/api/update-product', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-
-        // 2. Salva direto na planilha do Google via Webhook (Apps Script)
-        if (GOOGLE_APPS_SCRIPT_WEBHOOK_URL) {
-            await fetch(GOOGLE_APPS_SCRIPT_WEBHOOK_URL, {
-                method: 'POST',
-                mode: 'no-cors', // Evita bloqueio de CORS do Google Apps Script
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            console.log('Dados enviados para a planilha via Webhook!');
-        } else {
-            console.warn('URL do Webhook (GOOGLE_APPS_SCRIPT_WEBHOOK_URL) não configurada! A planilha não será atualizada.');
-            alert('Atenção: A URL do Webhook do Google Apps Script não foi configurada. As alterações foram salvas localmente, mas não foram para a planilha principal.');
+        
+        const result = await response.json();
+        if (result.googleSync && result.googleSync.success) {
+            console.log('Sincronizado com a planilha com sucesso!');
+        } else if (result.googleSync && result.googleSync.error) {
+            console.warn('Erro ao sincronizar com Google Sheets:', result.googleSync.error);
+            alert('Atenção: Houve um erro ao sincronizar com a planilha do Google Sheets: ' + result.googleSync.error);
         }
     } catch (err) {
-        console.warn('Sync com backend/webhook falhou:', err);
+        console.warn('Sync com backend falhou:', err);
     }
 
     // Atualiza a tela imediatamente
