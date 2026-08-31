@@ -11,63 +11,9 @@ const SPREADSHEET_ID = '1fX27pHe53zhNf3hb9-RZCi3E0DoU5pY0I93nwM_2o-Y';
 const GOOGLE_SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
 const GOOGLE_SHEET_FALLBACK_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv`;
 
-// Dados Iniciais Offline (Exatamente espelhado da planilha)
-const INITIAL_FALLBACK_PRODUCTS = [
-    {
-        id: 1,
-        sala: 'T54 - KIDS',
-        produto: '01.16.00.7759',
-        precoPrincipal: 15.00,
-        precoPrincipalFormatted: 'R$ 15,00',
-        obs: 'aaa',
-        markup: 2.5,
-        pdvSugerido: 37.50,
-        pdvFormatted: 'R$ 37,50',
-        variacoes: [
-            { nome: 'sem estampa', preco: 12.00, precoFormatted: 'R$ 12,00' },
-            { nome: 'sem nada', preco: 11.00, precoFormatted: 'R$ 11,00' },
-            { nome: 'sem costura', preco: 11.00, precoFormatted: 'R$ 11,00' }
-        ]
-    },
-    {
-        id: 2,
-        sala: 'T54 - KIDS',
-        produto: '01.16.00.7756C',
-        precoPrincipal: 15.00,
-        precoPrincipalFormatted: 'R$ 15,00',
-        obs: 'nenhuma',
-        markup: 2.5,
-        pdvSugerido: 37.50,
-        pdvFormatted: 'R$ 37,50',
-        variacoes: []
-    },
-    {
-        id: 3,
-        sala: 'T54 - KIDS',
-        produto: '01.16.00.7756A',
-        precoPrincipal: 16.00,
-        precoPrincipalFormatted: 'R$ 16,00',
-        obs: 'vvvv',
-        markup: 2.5,
-        pdvSugerido: 40.00,
-        pdvFormatted: 'R$ 40,00',
-        variacoes: []
-    },
-    {
-        id: 4,
-        sala: 'T54 - KIDS',
-        produto: '01.16.00.7756B',
-        precoPrincipal: 18.00,
-        precoPrincipalFormatted: 'R$ 18,00',
-        obs: 'dddddd',
-        markup: 2.5,
-        pdvSugerido: 45.00,
-        pdvFormatted: 'R$ 45,00',
-        variacoes: [
-            { nome: 'sem nada', preco: 11.00, precoFormatted: 'R$ 11,00' }
-        ]
-    }
-];
+// Dados Iniciais: array vazio - dados reais vêm da planilha Google Sheets
+const INITIAL_FALLBACK_PRODUCTS = [];
+
 
 // Estado Global da Aplicação
 let imageMap = {};
@@ -85,6 +31,7 @@ const state = {
     searchQuery: '',
     currentScreen: 'welcome', // 'welcome' (Tela 1) | 'presentation' (Tela 2)
     currentView: 'showcase',  // 'list' | 'showcase'
+    previousView: null,       // rastreia de onde veio o showcase (ex: 'list')
     currentIndex: 0,
     activeVariation: null,
     customMarkup: 2.5,
@@ -271,23 +218,42 @@ function renderPresentationScreen() {
     const viewShowcasePanel = document.getElementById('viewShowcasePanel');
     const btnToggleList = document.getElementById('btnToggleList');
     const btnToggleShowcase = document.getElementById('btnToggleShowcase');
+    const btnBackToList = document.getElementById('btnBackToList');
 
     if (state.currentView === 'list') {
         viewListPanel.classList.add('active');
         viewShowcasePanel.classList.remove('active');
         btnToggleList.classList.add('active');
         btnToggleShowcase.classList.remove('active');
+        // Ao entrar na lista normalmente, reseta o histórico de navegação
+        state.previousView = null;
+        if (btnBackToList) btnBackToList.style.display = 'none';
         renderListView();
     } else {
         viewListPanel.classList.remove('active');
         viewShowcasePanel.classList.add('active');
         btnToggleList.classList.remove('active');
         btnToggleShowcase.classList.add('active');
+        // Mostrar botão "← Lista" somente se veio da lista
+        if (btnBackToList) {
+            btnBackToList.style.display = state.previousView === 'list' ? 'inline-flex' : 'none';
+        }
         renderShowcaseView();
     }
 
     updateCounterLabels();
 }
+
+/**
+ * Volta para a lista a partir do showcase (preservando posição de rolagem)
+ */
+function backToList() {
+    state.previousView = null;
+    state.currentView = 'list';
+    renderPresentationScreen();
+}
+window.backToList = backToList;
+
 
 /**
  * 2.A: Renderização do Modo Lista (Tabela com Miniaturas e Filtros)
@@ -424,6 +390,7 @@ function renderListView() {
                 state.currentIndex = originalIdx;
             }
             state.activeVariation = null;
+            state.previousView = 'list'; // vindo da lista, permite voltar
             state.currentView = 'showcase';
             renderPresentationScreen();
         });
@@ -1177,16 +1144,23 @@ function applyImageSize(widthPx) {
     const header = document.querySelector('.products-table-header');
     if (header) header.style.gridTemplateColumns = gridCols;
 
-    document.querySelectorAll('.table-list-row').forEach(row => {
+    const rows = document.querySelectorAll('.table-list-row');
+    rows.forEach(row => {
         row.style.gridTemplateColumns = gridCols;
     });
 
     document.querySelectorAll('.row-thumb-box').forEach(box => {
         box.style.width = `${w}px`;
         box.style.height = `${h}px`;
+        box.style.minWidth = `${w}px`;
     });
 
-    // 3) Atualizar label
+    // 3) Se não encontrou rows (lista ainda não renderizada ou vazia), forçar re-render
+    if (rows.length === 0 && state.currentView === 'list' && state.currentScreen === 'presentation') {
+        renderListView();
+    }
+
+    // 4) Atualizar label
     const sizeLabel = document.getElementById('imgSizeValLabel');
     if (sizeLabel) sizeLabel.textContent = `${w}px`;
 }

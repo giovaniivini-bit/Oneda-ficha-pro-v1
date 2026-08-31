@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
     <!-- Estilos -->
-    <link rel="stylesheet" href="style.css?v=11.0.0">
+    <link rel="stylesheet" href="style.css?v=12.0.0">
 </head>
 <body class="theme-dark">
     <!-- Efeitos de Fundo Luminoso (Ambient Mesh Glow) -->
@@ -255,6 +255,12 @@
                     
                     <!-- BARRA SUPERIOR DO STAGE: CÓDIGO SKU + DESCRIÇÃO + CONTROLES + BOTÃO LÁPIS VERDE -->
                     <div class="showcase-top-bar">
+                        <!-- Botão Voltar à Lista (só aparece quando entrou via lista) -->
+                        <button class="btn-back-to-list" id="btnBackToList" style="display:none;" title="Voltar para a Lista" onclick="backToList()">
+                            <i class="fa-solid fa-arrow-left"></i>
+                            <span>Lista</span>
+                        </button>
+
                         <!-- Código SKU e Descrição em Destaque -->
                         <div class="sku-header-badge">
                             <i class="fa-solid fa-tag"></i>
@@ -517,6 +523,6 @@
     <div id="printArea" class="print-only-area"></div>
 
     <!-- Script Principal -->
-    <script src="app.js?v=11.0.0"></script>
+    <script src="app.js?v=12.0.0"></script>
 </body>
 </html>
