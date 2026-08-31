@@ -49,15 +49,28 @@ function updateImageMap() {
             if (['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext)) {
                 const base = path.basename(f, ext).trim().toUpperCase();
                 imageMap[base] = f;
+                
+                // Mapeamento sem pontos (ex: 0116007759)
+                imageMap[base.replace(/\./g, '')] = f;
+
+                // Base SKU sem letras no final (ex: 01.16.00.7756A -> 01.16.00.7756)
                 const stripped = base.replace(/[A-Z]+$/, '').trim();
                 if (stripped && !imageMap[stripped]) {
                     imageMap[stripped] = f;
+                    imageMap[stripped.replace(/\./g, '')] = f;
+                }
+
+                // Base SKU sem hífen (-1, -2)
+                const dashStripped = base.replace(/-\d+$/, '').trim();
+                if (dashStripped && !imageMap[dashStripped]) {
+                    imageMap[dashStripped] = f;
+                    imageMap[dashStripped.replace(/\./g, '')] = f;
                 }
             }
         });
 
         fs.writeFileSync(path.join(APP_DIR, 'image_map.json'), JSON.stringify(imageMap, null, 2), 'utf-8');
-        console.log(`[INFO] image_map.json atualizado com ${Object.keys(imageMap).length} referências.`);
+        console.log(`[INFO] image_map.json atualizado com ${Object.keys(imageMap).length} chaves indexadas.`);
     } catch (e) {
         console.error('[ERRO] Falha ao atualizar image_map.json:', e);
     }

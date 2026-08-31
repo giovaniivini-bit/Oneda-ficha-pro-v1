@@ -92,8 +92,8 @@ const state = {
 };
 
 // Inicialização
-document.addEventListener('DOMContentLoaded', () => {
-    loadImageMap();
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadImageMap();
     initApp();
     setupEventListeners();
     syncGoogleSheets(false);
@@ -106,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadImageMap() {
     try {
-        const res = await fetch('image_map.json', { cache: 'no-store' });
+        const res = await fetch('image_map.json?t=' + Date.now(), { cache: 'no-store' });
         if (res.ok) {
             imageMap = await res.json();
         }
@@ -1277,7 +1277,7 @@ function parseCSVRows(text) {
 
 /**
  * ==========================================================================
- * CARREGAMENTO E MANIPULAÇÃO DE IMAGENS
+ * CARREGAMENTO E MANIPULAÇÃO DE IMAGENS ULTRARRÁPIDO
  * ==========================================================================
  */
 function loadImageWithFallbackCascade(imgEl, placeholderEl, fallbackText, sku) {
@@ -1288,87 +1288,59 @@ function loadImageWithFallbackCascade(imgEl, placeholderEl, fallbackText, sku) {
     }
 
     const cleanSku = sku.trim();
-    const baseSku = cleanSku.replace(/[A-Za-z]+$/, '').trim();
-
-    if (manualUploadsMap[cleanSku]) {
-        imgEl.style.display = 'block';
-        placeholderEl.style.display = 'none';
-        imgEl.src = manualUploadsMap[cleanSku];
-        return;
-    }
-
-    const candidates = [];
-    if (imageMap && imageMap[cleanSku.toUpperCase()]) {
-        candidates.push(`images/${imageMap[cleanSku.toUpperCase()]}`);
-    }
-    if (imageMap && imageMap[baseSku.toUpperCase()]) {
-        candidates.push(`images/${imageMap[baseSku.toUpperCase()]}`);
-    }
-
-    const exts = ['.jpg', '.png', '.webp', '.jpeg', '.JPG', '.PNG', '.WEBP', '.JPEG'];
-    exts.forEach(ext => candidates.push(`images/${cleanSku}${ext}`));
-    if (baseSku && baseSku !== cleanSku) {
-        exts.forEach(ext => candidates.push(`images/${baseSku}${ext}`));
-    }
-
-    const uniqueCandidates = [...new Set(candidates)];
-    let currentIdx = 0;
-
-    function tryNext() {
-        if (currentIdx < uniqueCandidates.length) {
-            imgEl.src = uniqueCandidates[currentIdx++];
-        } else {
-            imgEl.style.display = 'none';
-            placeholderEl.style.display = 'flex';
-            if (fallbackText) fallbackText.textContent = cleanSku;
-        }
-    }
+    const resolvedUrl = getProductImageUrl(cleanSku);
 
     imgEl.onload = () => {
         imgEl.style.display = 'block';
         placeholderEl.style.display = 'none';
     };
-    imgEl.onerror = () => tryNext();
-    tryNext();
+    imgEl.onerror = () => {
+        imgEl.style.display = 'none';
+        placeholderEl.style.display = 'flex';
+        if (fallbackText) fallbackText.textContent = cleanSku;
+    };
+
+    imgEl.src = resolvedUrl;
 }
 
 function getProductImageUrl(sku) {
     if (!sku) return 'images/placeholder.jpg';
-    const cleanSku = sku.trim();
-    const baseSku = cleanSku.replace(/[A-Za-z]+$/, '').trim();
+    const cleanSku = sku.trim().toUpperCase();
+    const baseSku = cleanSku.replace(/[A-Z]+$/, '').replace(/-\d+$/, '').trim();
 
     if (manualUploadsMap[cleanSku]) return manualUploadsMap[cleanSku];
-    if (imageMap && imageMap[cleanSku.toUpperCase()]) return `images/${imageMap[cleanSku.toUpperCase()]}`;
-    if (imageMap && imageMap[baseSku.toUpperCase()]) return `images/${imageMap[baseSku.toUpperCase()]}`;
+    if (imageMap) {
+        const found = imageMap[cleanSku] || 
+                      imageMap[baseSku] || 
+                      imageMap[cleanSku.replace(/\./g, '')] || 
+                      imageMap[baseSku.replace(/\./g, '')];
+        if (found) return `images/${found}`;
+    }
     return `images/${cleanSku}.jpg`;
 }
 
 function handleCardImgError(imgEl, sku) {
-    const cleanSku = sku.trim();
-    const baseSku = cleanSku.replace(/[A-Za-z]+$/, '').trim();
+    const cleanSku = sku ? sku.trim().toUpperCase() : '';
+    const baseSku = cleanSku.replace(/[A-Z]+$/, '').replace(/-\d+$/, '').trim();
+    
     if (manualUploadsMap[cleanSku]) {
         imgEl.src = manualUploadsMap[cleanSku];
         return;
     }
 
-    const exts = ['.png', '.webp', '.jpeg', '.JPG', '.PNG'];
-    let idx = 0;
-    imgEl.onerror = () => {
-        if (idx < exts.length) {
-            imgEl.src = `images/${cleanSku}${exts[idx++]}`;
-        } else if (baseSku && baseSku !== cleanSku && !imgEl.dataset.triedBase) {
-            imgEl.dataset.triedBase = 'true';
-            imgEl.src = `images/${baseSku}.jpg`;
-        } else {
-            imgEl.parentElement.innerHTML = `
-                <div class="image-placeholder" style="display:flex;">
-                    <i class="fa-regular fa-image" style="font-size:24px;"></i>
-                    <small style="color:var(--text-muted);">${escapeHTML(sku)}</small>
-                </div>
-            `;
-        }
-    };
-    imgEl.src = `images/${cleanSku}${exts[idx++]}`;
+    if (imageMap && baseSku && imageMap[baseSku] && !imgEl.dataset.triedBase) {
+        imgEl.dataset.triedBase = 'true';
+        imgEl.src = `images/${imageMap[baseSku]}`;
+        return;
+    }
+
+    // Fallback limpo sem travar o navegador
+    imgEl.parentElement.innerHTML = `
+        <div class="image-placeholder" style="display:flex;">
+            <i class="fa-regular fa-image" style="font-size:24px;"></i>
+            <small style="color:var(--text-muted);">${escapeHTML(sku)}</small>
+        </div>
+    `;
 }
 
 function handleThumbImgError(imgEl) {
