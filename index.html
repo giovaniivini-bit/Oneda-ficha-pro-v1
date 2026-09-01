@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
     <!-- Estilos -->
-    <link rel="stylesheet" href="style.css?v=17.0.0">
+    <link rel="stylesheet" href="style.css?v=18.0.0">
 </head>
 <body class="theme-dark">
     <!-- Efeitos de Fundo Luminoso (Ambient Mesh Glow) -->
@@ -151,6 +151,10 @@
                         <i class="fa-solid fa-display"></i>
                         <span>1 por Folha</span>
                     </button>
+                    <button class="segment-btn" id="btnToggleStats" data-view="stats" title="Estatísticas da Coleção">
+                        <i class="fa-solid fa-chart-pie"></i>
+                        <span>Estatísticas</span>
+                    </button>
                 </div>
 
                 <button class="action-btn action-btn-sync" id="btnForceSync" onclick="triggerForceSync()" title="Forçar sincronização da planilha e fotos">
@@ -221,7 +225,13 @@
                 </div>
 
                 <div class="list-stats-bar">
-                    <span id="listTotalCounter">Exibindo 0 produtos</span>
+                    <div class="list-stats-left">
+                        <span id="listTotalCounter">Exibindo 0 produtos</span>
+                        <button class="btn-stats-link" id="btnOpenStats" onclick="openStatsView()" title="Abrir painel de análise e gráficos da coleção">
+                            <i class="fa-solid fa-chart-pie"></i>
+                            <span>Estatísticas da Coleção</span>
+                        </button>
+                    </div>
                     <span class="list-tip"><i class="fa-solid fa-mouse-pointer"></i> Clique em qualquer linha para abrir a folha em 100% da tela</span>
                 </div>
 
@@ -374,6 +384,147 @@
                         </div>
                     </div>
 
+                </div>
+            </section>
+
+            <!-- ============================================== -->
+            <!-- 2.C: MODO ESTATÍSTICAS & ANÁLISE DA COLEÇÃO     -->
+            <!-- ============================================== -->
+            <section class="view-panel view-stats" id="viewStatsPanel" style="display: none;">
+                <div class="stats-container">
+                    <!-- HEADER DO PAINEL DE ESTATÍSTICAS -->
+                    <div class="stats-header-bar glass-card">
+                        <div class="stats-header-info">
+                            <div class="stats-header-icon"><i class="fa-solid fa-chart-pie"></i></div>
+                            <div>
+                                <h2 class="stats-title">Estatísticas & Inteligência da Coleção</h2>
+                                <p class="stats-subtitle" id="statsSubtitle">Análise consolidada de preços médios, malhas e modelagens</p>
+                            </div>
+                        </div>
+                        <div class="stats-header-controls">
+                            <div class="filter-item-group stats-room-group">
+                                <label for="statsRoomFilter"><i class="fa-solid fa-door-open"></i> FILTRAR SALA:</label>
+                                <select id="statsRoomFilter" class="custom-select-dark" onchange="handleStatsRoomChange(this.value)">
+                                    <option value="ALL">Todas as Salas</option>
+                                </select>
+                            </div>
+                            <button class="btn-back-to-list-stats" id="btnBackFromStats" onclick="closeStatsView()" title="Voltar para a Lista">
+                                <i class="fa-solid fa-arrow-left"></i>
+                                <span>Voltar à Lista</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 4 CARDS DE KPI PRINCIPAIS -->
+                    <div class="stats-kpi-grid">
+                        <!-- KPI 1: CUSTO MÉDIO -->
+                        <div class="stats-kpi-card glass-card">
+                            <div class="kpi-icon-box kpi-icon-cost"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+                            <div class="kpi-details">
+                                <span class="kpi-label">Preço de Custo Médio</span>
+                                <h3 class="kpi-value" id="kpiAvgCost">R$ 0,00</h3>
+                                <div class="kpi-subtext" id="kpiCostRange">Mín: R$ 0,00 • Máx: R$ 0,00</div>
+                            </div>
+                        </div>
+
+                        <!-- KPI 2: PDV SUGERIDO MÉDIO -->
+                        <div class="stats-kpi-card glass-card">
+                            <div class="kpi-icon-box kpi-icon-pdv"><i class="fa-solid fa-tags"></i></div>
+                            <div class="kpi-details">
+                                <span class="kpi-label">PDV Sugerido Médio</span>
+                                <h3 class="kpi-value" id="kpiAvgPdv">R$ 0,00</h3>
+                                <div class="kpi-subtext" id="kpiAvgMarkup">Markup médio: 2.5x</div>
+                            </div>
+                        </div>
+
+                        <!-- KPI 3: TOTAL DE PRODUTOS -->
+                        <div class="stats-kpi-card glass-card">
+                            <div class="kpi-icon-box kpi-icon-items"><i class="fa-solid fa-boxes-stacked"></i></div>
+                            <div class="kpi-details">
+                                <span class="kpi-label">Total de Referências</span>
+                                <h3 class="kpi-value" id="kpiTotalItems">0</h3>
+                                <div class="kpi-subtext" id="kpiRoomsCount">Distribuídos em 0 salas</div>
+                            </div>
+                        </div>
+
+                        <!-- KPI 4: DIVERSIDADE -->
+                        <div class="stats-kpi-card glass-card">
+                            <div class="kpi-icon-box kpi-icon-fabrics"><i class="fa-solid fa-vest-patches"></i></div>
+                            <div class="kpi-details">
+                                <span class="kpi-label">Variedade de Tecidos</span>
+                                <h3 class="kpi-value" id="kpiFabricsCount">0</h3>
+                                <div class="kpi-subtext" id="kpiModelsCount">0 modelagens catalogadas</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- GRID DE 2 COLUNAS: GRÁFICOS DE DISTRIBUIÇÃO (MALHAS E MODELAGENS) -->
+                    <div class="stats-charts-grid">
+                        <!-- GRÁFICO 1: MALHAS MAIS UTILIZADAS -->
+                        <div class="stats-chart-card glass-card">
+                            <div class="chart-card-header">
+                                <div class="chart-title-box">
+                                    <div class="chart-icon-badge chart-icon-fabric"><i class="fa-solid fa-shirt"></i></div>
+                                    <div>
+                                        <h3>Malhas Mais Utilizadas</h3>
+                                        <p>Distribuição por tecido extraída das fichas técnicas</p>
+                                    </div>
+                                </div>
+                                <span class="chart-badge" id="badgeTotalFabrics">0 Tipos</span>
+                            </div>
+                            <div class="chart-card-body" id="chartFabricsList">
+                                <!-- Barras geradas dinamicamente via JS -->
+                            </div>
+                        </div>
+
+                        <!-- GRÁFICO 2: MODELAGENS MAIS UTILIZADAS -->
+                        <div class="stats-chart-card glass-card">
+                            <div class="chart-card-header">
+                                <div class="chart-title-box">
+                                    <div class="chart-icon-badge chart-icon-model"><i class="fa-solid fa-scissors"></i></div>
+                                    <div>
+                                        <h3>Modelagens Mais Utilizadas</h3>
+                                        <p>Formatos e cortes predominantes na coleção</p>
+                                    </div>
+                                </div>
+                                <span class="chart-badge" id="badgeTotalModels">0 Modelos</span>
+                            </div>
+                            <div class="chart-card-body" id="chartModelsList">
+                                <!-- Barras geradas dinamicamente via JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RANKING DE PREÇOS: TOP MAIS CAROS E MAIS BARATOS -->
+                    <div class="stats-ranking-grid">
+                        <!-- TOP 5 MAIS CAROS -->
+                        <div class="stats-ranking-card glass-card">
+                            <div class="ranking-header ranking-header-high">
+                                <i class="fa-solid fa-arrow-trend-up"></i>
+                                <div>
+                                    <h3>Top 5 Produtos Mais Caros (Maior Custo)</h3>
+                                    <p>Referências com maior valor de custo de fabricação</p>
+                                </div>
+                            </div>
+                            <div class="ranking-list" id="rankingExpensiveList">
+                                <!-- Itens gerados via JS -->
+                            </div>
+                        </div>
+
+                        <!-- TOP 5 MAIS ACESSÍVEIS -->
+                        <div class="stats-ranking-card glass-card">
+                            <div class="ranking-header ranking-header-low">
+                                <i class="fa-solid fa-arrow-trend-down"></i>
+                                <div>
+                                    <h3>Top 5 Produtos Mais Acessíveis (Menor Custo)</h3>
+                                    <p>Referências de entrada com melhor custo-benefício</p>
+                                </div>
+                            </div>
+                            <div class="ranking-list" id="rankingAffordableList">
+                                <!-- Itens gerados via JS -->
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -539,6 +690,6 @@
     <div id="appGlobalToast" class="global-toast"></div>
 
     <!-- Script Principal -->
-    <script src="app.js?v=17.0.0"></script>
+    <script src="app.js?v=18.0.0"></script>
 </body>
 </html>

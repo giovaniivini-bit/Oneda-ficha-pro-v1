@@ -1,14 +1,13 @@
-const fs = require('fs');
-const pythonCode = `import os, sys, json, re, subprocess
+import os, sys, json, re, subprocess
 from PIL import Image
 
 def clean_field(text):
     if not text:
         return ''
     t = text.strip()
-    t = re.sub(r'^(Alteração|Alteracao|Modelo|Ref|Item|Estilo|Ficha|Obs)[\\s:]*', '', t, flags=re.I).strip()
+    t = re.sub(r'^(Alteração|Alteracao|Modelo|Ref|Item|Estilo|Ficha|Obs)[\s:]*', '', t, flags=re.I).strip()
     t = re.sub(r'(Estilo|Data|C&A|C&amp;A|Palomino|CFC|Winter|Ref).*$', '', t, flags=re.I).strip()
-    t = re.sub(r'^[\\-_/|.:;,\\s]+|[\\-_/|.:;,\\s]+$', '', t).strip()
+    t = re.sub(r'^[\-_/|.:;,\s]+|[\-_/|.:;,\s]+$', '', t).strip()
     return t
 
 def process_images(images_dir, output_file):
@@ -46,11 +45,11 @@ def process_images(images_dir, output_file):
                 malha = ''
                 grade = ''
                 
-                lines = [l.strip() for l in text.split('\\n') if l.strip()]
+                lines = [l.strip() for l in text.split('\n') if l.strip()]
                 for line in lines:
                     # Replace 1/2 Malha with Meia Malha to avoid splitting by /
-                    line_norm = re.sub(r'\b1/2\s*Malha\b', 'Meia Malha', line, flags=re.I)
-                    line_norm = re.sub(r'\b1/2\b', 'Meia', line_norm)
+                    line_norm = re.sub(r'1/2s*Malha', 'Meia Malha', line, flags=re.I)
+                    line_norm = re.sub(r'1/2', 'Meia', line_norm)
                     
                     if '/' in line_norm and not line_norm.startswith('http'):
                         parts = [clean_field(p) for p in line_norm.split('/') if clean_field(p)]
@@ -59,7 +58,7 @@ def process_images(images_dir, output_file):
                             p0 = parts[0]
                             p1 = parts[1]
                             # If p0 has Cor or Alteracao, clean further
-                            p0 = re.sub(r'^.*(Alteração|Alteracao|Observação|Observacao)[:\s]*', '', p0, flags=re.I).strip()
+                            p0 = re.sub(r'^.*(Alteração|Alteracao|Observação|Observacao)[:s]*', '', p0, flags=re.I).strip()
                             if p0 and p1:
                                 modelagem = p0
                                 malha = p1
@@ -71,7 +70,7 @@ def process_images(images_dir, output_file):
                 if not modelagem:
                     for l in lines:
                         if '/' in l:
-                            l_norm = re.sub(r'\b1/2\b', 'Meia', l)
+                            l_norm = re.sub(r'1/2', 'Meia', l)
                             parts = [clean_field(p) for p in l_norm.split('/') if clean_field(p)]
                             if parts:
                                 modelagem = parts[0]
@@ -101,11 +100,3 @@ if __name__ == '__main__':
     images_dir = sys.argv[1] if len(sys.argv) > 1 else 'images'
     output_file = sys.argv[2] if len(sys.argv) > 2 else 'ficha_metadata.json'
     process_images(images_dir, output_file)
-`;
-
-fs.writeFileSync('extract_meta.py', pythonCode, 'utf8');
-console.log('extract_meta.py successfully written!');
-
-
-
-

@@ -21,6 +21,7 @@ const INITIAL_FALLBACK_PRODUCTS = [];
 
 // Estado Global da Aplicação
 let imageMap = {};
+let fichaMetadata = {};
 let manualUploadsMap = {};
 try {
     const saved = localStorage.getItem('oneda_manual_images');
@@ -34,8 +35,8 @@ const state = {
     selectedRooms: new Set(),
     searchQuery: '',
     currentScreen: 'welcome', // 'welcome' (Tela 1) | 'presentation' (Tela 2)
-    currentView: 'showcase',  // 'list' | 'showcase'
-    previousView: null,       // rastreia de onde veio o showcase (ex: 'list')
+    currentView: 'showcase',  // 'list' | 'showcase' | 'stats'
+    previousView: null,       // rastreia de onde veio o showcase (ex: 'list', 'stats')
     currentIndex: 0,
     activeVariation: null,
     customMarkup: 2.5,
@@ -43,7 +44,9 @@ const state = {
     // Filtros exclusivos da Tela de Lista
     listFilterSala: 'ALL',
     listSimulateMarkup: 'none',
-    listSort: 'price-asc'
+    listSort: 'price-asc',
+    // Filtro do Painel de Estatísticas
+    statsFilterSala: 'ALL'
 };
 
 // Inicialização
@@ -53,6 +56,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (e) {}
 
     await loadImageMap();
+    await loadFichaMetadata();
     initApp();
     setupEventListeners();
     syncGoogleSheets(false);
@@ -68,6 +72,15 @@ async function loadImageMap() {
         const res = await fetch('image_map.json?t=' + Date.now(), { cache: 'no-store' });
         if (res.ok) {
             imageMap = await res.json();
+        }
+    } catch (e) {}
+}
+
+async function loadFichaMetadata() {
+    try {
+        const res = await fetch('ficha_metadata.json?t=' + Date.now(), { cache: 'no-store' });
+        if (res.ok) {
+            fichaMetadata = await res.json();
         }
     } catch (e) {}
 }
@@ -218,33 +231,65 @@ function renderWelcomeRooms() {
 
 /**
  * ==========================================================================
- * TELA 2: RENDERIZAÇÃO DA APRESENTAÇÃO (LISTA OU 1 POR FOLHA FIXO)
+ * TELA 2: RENDERIZAÇÃO DA APRESENTAÇÃO (LISTA, SHOWCASE OU ESTATÍSTICAS)
  * ==========================================================================
  */
 function renderPresentationScreen() {
     const viewListPanel = document.getElementById('viewListPanel');
     const viewShowcasePanel = document.getElementById('viewShowcasePanel');
+    const viewStatsPanel = document.getElementById('viewStatsPanel');
     const btnToggleList = document.getElementById('btnToggleList');
     const btnToggleShowcase = document.getElementById('btnToggleShowcase');
+    const btnToggleStats = document.getElementById('btnToggleStats');
     const btnBackToList = document.getElementById('btnBackToList');
 
+    if (!viewListPanel || !viewShowcasePanel) return;
+
     if (state.currentView === 'list') {
+        viewListPanel.style.display = 'block';
+        viewShowcasePanel.style.display = 'none';
+        if (viewStatsPanel) viewStatsPanel.style.display = 'none';
+
         viewListPanel.classList.add('active');
         viewShowcasePanel.classList.remove('active');
-        btnToggleList.classList.add('active');
-        btnToggleShowcase.classList.remove('active');
-        // Ao entrar na lista normalmente, reseta o histórico de navegação
+        if (viewStatsPanel) viewStatsPanel.classList.remove('active');
+
+        if (btnToggleList) btnToggleList.classList.add('active');
+        if (btnToggleShowcase) btnToggleShowcase.classList.remove('active');
+        if (btnToggleStats) btnToggleStats.classList.remove('active');
+
         state.previousView = null;
         if (btnBackToList) btnBackToList.style.display = 'none';
         renderListView();
+    } else if (state.currentView === 'stats') {
+        viewListPanel.style.display = 'none';
+        viewShowcasePanel.style.display = 'none';
+        if (viewStatsPanel) viewStatsPanel.style.display = 'block';
+
+        viewListPanel.classList.remove('active');
+        viewShowcasePanel.classList.remove('active');
+        if (viewStatsPanel) viewStatsPanel.classList.add('active');
+
+        if (btnToggleList) btnToggleList.classList.remove('active');
+        if (btnToggleShowcase) btnToggleShowcase.classList.remove('active');
+        if (btnToggleStats) btnToggleStats.classList.add('active');
+
+        renderStatsView();
     } else {
+        viewListPanel.style.display = 'none';
+        viewShowcasePanel.style.display = 'block';
+        if (viewStatsPanel) viewStatsPanel.style.display = 'none';
+
         viewListPanel.classList.remove('active');
         viewShowcasePanel.classList.add('active');
-        btnToggleList.classList.remove('active');
-        btnToggleShowcase.classList.add('active');
-        // Mostrar botão "← Lista" somente se veio da lista
+        if (viewStatsPanel) viewStatsPanel.classList.remove('active');
+
+        if (btnToggleList) btnToggleList.classList.remove('active');
+        if (btnToggleShowcase) btnToggleShowcase.classList.add('active');
+        if (btnToggleStats) btnToggleStats.classList.remove('active');
+
         if (btnBackToList) {
-            btnBackToList.style.display = state.previousView === 'list' ? 'inline-flex' : 'none';
+            btnBackToList.style.display = (state.previousView === 'list' || state.previousView === 'stats') ? 'inline-flex' : 'none';
         }
         renderShowcaseView();
     }
@@ -253,15 +298,369 @@ function renderPresentationScreen() {
 }
 
 /**
+ * Abre o Painel de Estatísticas da Coleção
+ */
+function openStatsView() {
+    state.previousView = state.currentView;
+    state.currentView = 'stats';
+    renderPresentationScreen();
+}
+window.openStatsView = openStatsView;
+
+/**
+ * Fecha o Painel de Estatísticas e volta para a Lista
+ */
+function closeStatsView() {
+    state.currentView = 'list';
+    renderPresentationScreen();
+}
+window.closeStatsView = closeStatsView;
+
+/**
+ * Filtro de sala específico para a tela de estatísticas
+ */
+function handleStatsRoomChange(roomVal) {
+    state.statsFilterSala = roomVal;
+    renderStatsView();
+}
+window.handleStatsRoomChange = handleStatsRoomChange;
+
+/**
  * Volta para a lista a partir do showcase (preservando posição de rolagem)
  */
 function backToList() {
+    const dest = state.previousView === 'stats' ? 'stats' : 'list';
     state.previousView = null;
-    state.currentView = 'list';
+    state.currentView = dest;
     renderPresentationScreen();
 }
 window.backToList = backToList;
 
+/**
+ * Navega direto para um produto específico no Showcase pelo ID
+ */
+function goToProductById(prodId) {
+    const idx = state.filteredProducts.findIndex(p => p.id === prodId);
+    if (idx !== -1) {
+        state.currentIndex = idx;
+        state.previousView = state.currentView;
+        state.currentView = 'showcase';
+        renderPresentationScreen();
+    }
+}
+window.goToProductById = goToProductById;
+
+/**
+ * Extrai / Normaliza a Malha do produto a partir de metadados OCR da ficha ou descrição
+ */
+function getProductMalha(prod) {
+    if (!prod) return 'Não Especificada';
+    const skuClean = (prod.produto || '').toUpperCase().trim();
+    const baseSku = skuClean.replace(/[A-Z]+$/, '').replace(/-\d+$/, '').trim();
+    const meta = fichaMetadata[skuClean] || fichaMetadata[baseSku] || {};
+    let raw = (meta.malha || '').trim();
+
+    if (!raw && prod.obs) {
+        const mMatch = prod.obs.match(/(meia\s*malha|moletom|molecotton|cotton|ribana|viscose|favo|waffle|gorgur[aã]o|piquet|linho|malh[aã]o)/i);
+        if (mMatch) raw = mMatch[0];
+    }
+    if (!raw && prod.descricao) {
+        const mMatch2 = prod.descricao.match(/(moletom|malha|cotton|ribana|viscose|linho)/i);
+        if (mMatch2) raw = mMatch2[0];
+    }
+
+    if (!raw) return 'Meia Malha Penteada';
+
+    let clean = raw.trim();
+    clean = clean.replace(/^[-\s/.:;]+|[-\s/.:;]+$/g, '');
+    clean = clean.replace(/\b1\/2\s*Malha\b/gi, 'Meia Malha');
+    clean = clean.replace(/\b1\/2\b/g, 'Meia');
+
+    if (/meia\s*malha\s*pent/i.test(clean)) return 'Meia Malha Penteada';
+    if (/meia\s*malha\s*card/i.test(clean)) return 'Meia Malha Cardada';
+    if (/meia\s*malha/i.test(clean)) return 'Meia Malha Penteada';
+    if (/malh[aã]o/i.test(clean)) return 'Malhão Penteado';
+    if (/molecotton\s*jeans/i.test(clean)) return 'Molecotton Jeans';
+    if (/molecotton/i.test(clean)) return 'Molecotton';
+    if (/moletom.*com\s*felpa/i.test(clean) || /moletom.*c\/\s*felpa/i.test(clean)) return 'Moletom com Felpa';
+    if (/moletom.*sem\s*felpa/i.test(clean) || /moletom.*s\/\s*felpa/i.test(clean)) return 'Moletom sem Felpa';
+    if (/moletom/i.test(clean)) return 'Moletom PA';
+    if (/moletinho/i.test(clean)) return 'Moletinho';
+    if (/malha\s*favo/i.test(clean)) return 'Malha Favo';
+    if (/waffle/i.test(clean)) return 'Waffle Elegance';
+    if (/gorgur[aã]o/i.test(clean)) return 'Gorgurão PA';
+    if (/ribana/i.test(clean)) return 'Ribana 2x1';
+    if (/cotton/i.test(clean)) return 'Cotton com Elastano';
+    if (/piquet/i.test(clean)) return 'Piquet';
+    if (/viscose/i.test(clean)) return 'Viscose';
+
+    return clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
+/**
+ * Extrai / Normaliza a Modelagem do produto a partir de metadados OCR da ficha ou descrição
+ */
+function getProductModelagem(prod) {
+    if (!prod) return 'Não Especificada';
+    const skuClean = (prod.produto || '').toUpperCase().trim();
+    const baseSku = skuClean.replace(/[A-Z]+$/, '').replace(/-\d+$/, '').trim();
+    const meta = fichaMetadata[skuClean] || fichaMetadata[baseSku] || {};
+    let raw = (meta.modelagem || '').trim();
+
+    if (!raw && prod.descricao) {
+        raw = prod.descricao.split('/')[0].trim();
+    }
+
+    if (!raw) return 'Top Manga Curta';
+
+    let clean = raw.trim();
+    clean = clean.replace(/^[-\s/.:;\[\]|]+|[-\s/.:;\[\]|]+$/g, '');
+    clean = clean.replace(/^(Alteração|Alteracao|Modelo|Ref|Item)[:\s]*/i, '');
+    clean = clean.replace(/(Estilo|Data|C&A|C&amp;A).*$/i, '').trim();
+
+    if (/mach[aã]o/i.test(clean)) return 'Top Machão Box';
+    if (/top\s*mc\s*oversized/i.test(clean)) return 'Top MC Oversized';
+    if (/top\s*curto/i.test(clean) || /top\s*mc/i.test(clean)) return 'Top Manga Curta (MC)';
+    if (/top\s*longo/i.test(clean) || /top\s*ml/i.test(clean)) return 'Top Manga Longa (ML)';
+    if (/conj.*blus[aã]o/i.test(clean) || /conj.*moletom/i.test(clean)) return 'Conjunto Moletom';
+    if (/conj.*polo/i.test(clean)) return 'Conjunto Polo';
+    if (/conj.*curto/i.test(clean) || /conj.*top\s*mc/i.test(clean)) return 'Conjunto Curto';
+    if (/conj.*longo/i.test(clean)) return 'Conjunto Longo';
+    if (/shorts\s*saia/i.test(clean)) return 'Shorts Saia';
+    if (/shorts/i.test(clean)) return 'Shorts';
+    if (/jardineira/i.test(clean)) return 'Jardineira';
+    if (/cal[cç]a\s*jogger/i.test(clean)) return 'Calça Jogger';
+    if (/cal[cç]a\s*clochard/i.test(clean)) return 'Calça Clochard';
+    if (/cal[cç]a/i.test(clean)) return 'Calça';
+    if (/body\s*curto/i.test(clean)) return 'Body Curto';
+    if (/body/i.test(clean)) return 'Body';
+    if (/macaquinho/i.test(clean)) return 'Macaquinho';
+    if (/vestido/i.test(clean)) return 'Vestido';
+    if (/regata/i.test(clean)) return 'Regata';
+    if (/polo/i.test(clean)) return 'Camisa Polo';
+
+    return clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
+/**
+ * 2.C: Renderização do Painel de Estatísticas & Inteligência de Coleção
+ */
+function renderStatsView() {
+    const viewStatsPanel = document.getElementById('viewStatsPanel');
+    if (!viewStatsPanel) return;
+
+    // Popula o select de salas das estatísticas
+    const selectStatsRoom = document.getElementById('statsRoomFilter');
+    if (selectStatsRoom) {
+        let roomOpts = '<option value="ALL">Todas as Salas</option>';
+        state.availableRooms.forEach(r => {
+            roomOpts += `<option value="${escapeHTML(r)}" ${state.statsFilterSala === r ? 'selected' : ''}>${escapeHTML(r)}</option>`;
+        });
+        selectStatsRoom.innerHTML = roomOpts;
+        if (!state.statsFilterSala) state.statsFilterSala = 'ALL';
+        selectStatsRoom.value = state.statsFilterSala;
+    }
+
+    // Filtra produtos conforme a sala selecionada no painel de estatísticas
+    let activeProducts = state.allProducts.filter(p => {
+        const roomMatch = state.selectedRooms.size === 0 || state.selectedRooms.has(p.sala);
+        if (!roomMatch) return false;
+        if (state.statsFilterSala !== 'ALL' && p.sala !== state.statsFilterSala) return false;
+        return true;
+    });
+
+    if (activeProducts.length === 0) {
+        activeProducts = state.filteredProducts.length > 0 ? state.filteredProducts : state.allProducts;
+    }
+
+    const totalCount = activeProducts.length;
+
+    // Subtítulo
+    const subtitle = document.getElementById('statsSubtitle');
+    if (subtitle) {
+        const roomText = state.statsFilterSala === 'ALL' ? 'todas as salas' : `a sala ${state.statsFilterSala}`;
+        subtitle.textContent = `Análise consolidada de ${totalCount} produtos para ${roomText}`;
+    }
+
+    if (totalCount === 0) return;
+
+    // 1. Cálculos de Custos e PDV
+    let totalCost = 0;
+    let totalPdv = 0;
+    let minCost = Infinity;
+    let maxCost = -Infinity;
+    let validCostItems = 0;
+
+    activeProducts.forEach(p => {
+        const cost = p.precoPrincipal || 0;
+        const pdv = p.pdvSugerido || 0;
+        if (cost > 0) {
+            totalCost += cost;
+            validCostItems++;
+            if (cost < minCost) minCost = cost;
+            if (cost > maxCost) maxCost = cost;
+        }
+        if (pdv > 0) {
+            totalPdv += pdv;
+        }
+    });
+
+    const avgCost = validCostItems > 0 ? (totalCost / validCostItems) : 0;
+    const avgPdv = validCostItems > 0 ? (totalPdv / validCostItems) : 0;
+    const avgMarkup = avgCost > 0 ? (avgPdv / avgCost) : 2.5;
+
+    // Preenche KPIs
+    const kpiAvgCost = document.getElementById('kpiAvgCost');
+    const kpiCostRange = document.getElementById('kpiCostRange');
+    const kpiAvgPdv = document.getElementById('kpiAvgPdv');
+    const kpiAvgMarkup = document.getElementById('kpiAvgMarkup');
+    const kpiTotalItems = document.getElementById('kpiTotalItems');
+    const kpiRoomsCount = document.getElementById('kpiRoomsCount');
+    const kpiFabricsCount = document.getElementById('kpiFabricsCount');
+    const kpiModelsCount = document.getElementById('kpiModelsCount');
+
+    if (kpiAvgCost) kpiAvgCost.textContent = formatCurrency(avgCost);
+    if (kpiCostRange) kpiCostRange.textContent = `Mín: ${formatCurrency(minCost === Infinity ? 0 : minCost)} • Máx: ${formatCurrency(maxCost === -Infinity ? 0 : maxCost)}`;
+    if (kpiAvgPdv) kpiAvgPdv.textContent = formatCurrency(avgPdv);
+    if (kpiAvgMarkup) kpiAvgMarkup.textContent = `Markup médio: ${avgMarkup.toFixed(2)}x`;
+    if (kpiTotalItems) kpiTotalItems.textContent = totalCount;
+    
+    const uniqueRooms = new Set(activeProducts.map(p => p.sala)).size;
+    if (kpiRoomsCount) kpiRoomsCount.textContent = `Distribuídos em ${uniqueRooms} sala${uniqueRooms !== 1 ? 's' : ''}`;
+
+    // 2. Agregação de Malhas e Modelagens
+    const fabricMap = {};
+    const modelMap = {};
+
+    activeProducts.forEach(p => {
+        const malha = getProductMalha(p);
+        const model = getProductModelagem(p);
+
+        if (!fabricMap[malha]) fabricMap[malha] = { count: 0, totalCost: 0 };
+        fabricMap[malha].count++;
+        fabricMap[malha].totalCost += (p.precoPrincipal || 0);
+
+        if (!modelMap[model]) modelMap[model] = { count: 0, totalCost: 0 };
+        modelMap[model].count++;
+        modelMap[model].totalCost += (p.precoPrincipal || 0);
+    });
+
+    const fabricList = Object.entries(fabricMap)
+        .map(([name, data]) => ({
+            name,
+            count: data.count,
+            pct: ((data.count / totalCount) * 100).toFixed(1),
+            avgCost: data.count > 0 ? (data.totalCost / data.count) : 0
+        }))
+        .sort((a, b) => b.count - a.count);
+
+    const modelList = Object.entries(modelMap)
+        .map(([name, data]) => ({
+            name,
+            count: data.count,
+            pct: ((data.count / totalCount) * 100).toFixed(1),
+            avgCost: data.count > 0 ? (data.totalCost / data.count) : 0
+        }))
+        .sort((a, b) => b.count - a.count);
+
+    if (kpiFabricsCount) kpiFabricsCount.textContent = `${fabricList.length} Tecidos`;
+    if (kpiModelsCount) kpiModelsCount.textContent = `${modelList.length} modelagens catalogadas`;
+
+    const badgeFabrics = document.getElementById('badgeTotalFabrics');
+    if (badgeFabrics) badgeFabrics.textContent = `${fabricList.length} Tipos`;
+
+    const badgeModels = document.getElementById('badgeTotalModels');
+    if (badgeModels) badgeModels.textContent = `${modelList.length} Modelos`;
+
+    // Renderiza Gráfico 1: Malhas
+    const chartFabricsList = document.getElementById('chartFabricsList');
+    if (chartFabricsList) {
+        chartFabricsList.innerHTML = fabricList.map(item => `
+            <div class="chart-bar-item">
+                <div class="chart-bar-header">
+                    <span class="chart-bar-name" title="${escapeHTML(item.name)}"><i class="fa-solid fa-layer-group" style="color: var(--accent-cyan); margin-right: 6px;"></i> ${escapeHTML(item.name)}</span>
+                    <div class="chart-bar-stats">
+                        <span class="chart-bar-count">${item.count} pç${item.count !== 1 ? 's' : ''}</span>
+                        <span class="chart-bar-pct">${item.pct}%</span>
+                        <span class="chart-bar-avg" title="Custo médio da malha">Méd: ${formatCurrency(item.avgCost)}</span>
+                    </div>
+                </div>
+                <div class="chart-progress-bg">
+                    <div class="chart-progress-fill chart-fill-cyan" style="width: ${Math.max(4, item.pct)}%;"></div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // Renderiza Gráfico 2: Modelagens
+    const chartModelsList = document.getElementById('chartModelsList');
+    if (chartModelsList) {
+        chartModelsList.innerHTML = modelList.map(item => `
+            <div class="chart-bar-item">
+                <div class="chart-bar-header">
+                    <span class="chart-bar-name" title="${escapeHTML(item.name)}"><i class="fa-solid fa-shapes" style="color: var(--accent-purple); margin-right: 6px;"></i> ${escapeHTML(item.name)}</span>
+                    <div class="chart-bar-stats">
+                        <span class="chart-bar-count">${item.count} pç${item.count !== 1 ? 's' : ''}</span>
+                        <span class="chart-bar-pct" style="color: var(--accent-purple); background: rgba(168,85,247,0.12);">${item.pct}%</span>
+                        <span class="chart-bar-avg" title="Custo médio da modelagem">Méd: ${formatCurrency(item.avgCost)}</span>
+                    </div>
+                </div>
+                <div class="chart-progress-bg">
+                    <div class="chart-progress-fill chart-fill-purple" style="width: ${Math.max(4, item.pct)}%;"></div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // 3. Rankings: Top 5 Mais Caros e Top 5 Mais Baratos
+    const validProds = activeProducts.filter(p => (p.precoPrincipal || 0) > 0);
+    const sortedDesc = [...validProds].sort((a, b) => (b.precoPrincipal || 0) - (a.precoPrincipal || 0)).slice(0, 5);
+    const sortedAsc = [...validProds].sort((a, b) => (a.precoPrincipal || 0) - (b.precoPrincipal || 0)).slice(0, 5);
+
+    const rankingExpensive = document.getElementById('rankingExpensiveList');
+    if (rankingExpensive) {
+        rankingExpensive.innerHTML = sortedDesc.map((p, idx) => {
+            const imgUrl = getProductImageUrl(p);
+            return `
+                <div class="ranking-item" onclick="goToProductById(${p.id})" title="Clique para abrir no modo 1 por folha">
+                    <div class="ranking-pos ${idx === 0 ? 'ranking-pos-1' : ''}">${idx + 1}</div>
+                    <img class="ranking-thumb" src="${imgUrl}" alt="${escapeHTML(p.produto)}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'44\\' height=\\'44\\' fill=\\'%2364748b\\'><rect width=\\'100%\\' height=\\'100%\\' fill=\\'%231e293b\\'/><text x=\\'50%\\' y=\\'50%\\' dominant-baseline=\\'middle\\' text-anchor=\\'middle\\' fill=\\'%2394a3b8\\' font-size=\\'10\\'>SEM FOTO</text></svg>'">
+                    <div class="ranking-info">
+                        <span class="ranking-sku-tag">${escapeHTML(p.produto)}</span>
+                        <span class="ranking-desc">${escapeHTML(p.descricao || 'Sem descrição')}</span>
+                        <span class="ranking-sala-badge"><i class="fa-solid fa-door-open"></i> ${escapeHTML(p.sala)} • ${escapeHTML(getProductMalha(p))}</span>
+                    </div>
+                    <div class="ranking-price-box">
+                        <div class="ranking-cost">${formatCurrency(p.precoPrincipal)}</div>
+                        <div class="ranking-pdv">PDV: ${formatCurrency(p.pdvSugerido)}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    const rankingAffordable = document.getElementById('rankingAffordableList');
+    if (rankingAffordable) {
+        rankingAffordable.innerHTML = sortedAsc.map((p, idx) => {
+            const imgUrl = getProductImageUrl(p);
+            return `
+                <div class="ranking-item" onclick="goToProductById(${p.id})" title="Clique para abrir no modo 1 por folha">
+                    <div class="ranking-pos ${idx === 0 ? 'ranking-pos-1' : ''}">${idx + 1}</div>
+                    <img class="ranking-thumb" src="${imgUrl}" alt="${escapeHTML(p.produto)}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'44\\' height=\\'44\\' fill=\\'%2364748b\\'><rect width=\\'100%\\' height=\\'100%\\' fill=\\'%231e293b\\'/><text x=\\'50%\\' y=\\'50%\\' dominant-baseline=\\'middle\\' text-anchor=\\'middle\\' fill=\\'%2394a3b8\\' font-size=\\'10\\'>SEM FOTO</text></svg>'">
+                    <div class="ranking-info">
+                        <span class="ranking-sku-tag">${escapeHTML(p.produto)}</span>
+                        <span class="ranking-desc">${escapeHTML(p.descricao || 'Sem descrição')}</span>
+                        <span class="ranking-sala-badge"><i class="fa-solid fa-door-open"></i> ${escapeHTML(p.sala)} • ${escapeHTML(getProductMalha(p))}</span>
+                    </div>
+                    <div class="ranking-price-box">
+                        <div class="ranking-cost">${formatCurrency(p.precoPrincipal)}</div>
+                        <div class="ranking-pdv">PDV: ${formatCurrency(p.pdvSugerido)}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+}
 
 /**
  * 2.A: Renderização do Modo Lista (Tabela com Miniaturas e Filtros)
@@ -663,7 +1062,7 @@ function setupEventListeners() {
         updateScreenVisibility();
     });
 
-    // Tela 2: Toggle Rápido Lista / 1 por Folha
+    // Tela 2: Toggle Rápido Lista / 1 por Folha / Estatísticas
     safeAdd('btnToggleList', 'click', () => {
         state.currentView = 'list';
         renderPresentationScreen();
@@ -671,6 +1070,12 @@ function setupEventListeners() {
     safeAdd('btnToggleShowcase', 'click', () => {
         state.currentView = 'showcase';
         renderPresentationScreen();
+    });
+    safeAdd('btnToggleStats', 'click', () => {
+        openStatsView();
+    });
+    safeAdd('btnOpenStats', 'click', () => {
+        openStatsView();
     });
 
     // Filtros exclusivos da Tela de Lista
@@ -1720,7 +2125,9 @@ function loadImageWithFallbackCascade(imgEl, placeholderEl, fallbackText, sku) {
     imgEl.src = resolvedUrl;
 }
 
-function getProductImageUrl(sku) {
+function getProductImageUrl(skuOrProd) {
+    if (!skuOrProd) return 'images/placeholder.jpg';
+    const sku = typeof skuOrProd === 'object' ? (skuOrProd.produto || '') : String(skuOrProd);
     if (!sku) return 'images/placeholder.jpg';
     const cleanSku = sku.trim().toUpperCase();
     const baseSku = cleanSku.replace(/[A-Z]+$/, '').replace(/-\d+$/, '').trim();
