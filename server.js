@@ -201,7 +201,7 @@ function updateImageMap() {
 // Initial image map build
 updateImageMap();
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
     // CORS Headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -221,8 +221,31 @@ const server = http.createServer((req, res) => {
     }
 
     // Endpoint de dados da planilha Google Sheets em tempo real
-    if (req.url === '/api/sheet-data') {
-        const sheetUrl = 'https://docs.google.com/spreadsheets/d/1fX27pHe53zhNf3hb9-RZCi3E0DoU5pY0I93nwM_2o-Y/gviz/tq?tqx=out:csv';
+    if (req.url && req.url.startsWith('/api/sheet-data')) {
+        // 1. Tenta API Oficial v4 (Dados 100% em tempo real, sem cache intermediário do Google)
+        if (sheetsAuthClient) {
+            try {
+                const sheets = google.sheets({ version: 'v4', auth: sheetsAuthClient });
+                const getRes = await sheets.spreadsheets.values.get({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: 'A:Z'
+                });
+                if (getRes.data && getRes.data.values && getRes.data.values.length > 0) {
+                    res.writeHead(200, {
+                        'Content-Type': 'application/json; charset=utf-8',
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Access-Control-Allow-Origin': '*'
+                    });
+                    res.end(JSON.stringify({ success: true, rows: getRes.data.values }));
+                    return;
+                }
+            } catch (e) {
+                console.error('[AVISO] Falha ao ler via API v4, tentando fallback CSV:', e.message);
+            }
+        }
+
+        // 2. Fallback CSV com cache-buster
+        const sheetUrl = 'https://docs.google.com/spreadsheets/d/1fX27pHe53zhNf3hb9-RZCi3E0DoU5pY0I93nwM_2o-Y/gviz/tq?tqx=out:csv&t=' + Date.now();
         https.get(sheetUrl, (sheetRes) => {
             let data = '';
             sheetRes.on('data', chunk => data += chunk);

@@ -48,15 +48,19 @@ const state = {
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        localStorage.removeItem('oneda_product_overrides');
+    } catch (e) {}
+
     await loadImageMap();
     initApp();
     setupEventListeners();
     syncGoogleSheets(false);
 
-    // Polling automático da planilha a cada 8 segundos
+    // Polling automático da planilha em tempo real a cada 4 segundos
     setInterval(() => {
         syncGoogleSheets(true);
-    }, 8000);
+    }, 4000);
 });
 
 async function loadImageMap() {
@@ -1492,41 +1496,49 @@ window.triggerForceSync = triggerForceSync;
  */
 async function syncGoogleSheets(silent = false) {
     try {
-        let csvText = '';
+        let sheetData = null;
 
-        // 1. Tenta API do próprio backend (evita bloqueios de CORS)
+        // 1. Tenta API oficial v4 do backend (Tempo real, 0 cache)
         try {
-            const apiRes = await fetch('/api/sheet-data', { cache: 'no-store' });
+            const apiRes = await fetch('/api/sheet-data?t=' + Date.now(), { cache: 'no-store' });
             if (apiRes.ok) {
-                const text = await apiRes.text();
-                if (text && text.length > 20) csvText = text;
+                const contentType = apiRes.headers.get('content-type') || '';
+                if (contentType.includes('application/json')) {
+                    const json = await apiRes.json();
+                    if (json && json.success && json.rows) {
+                        sheetData = json.rows;
+                    }
+                } else {
+                    const text = await apiRes.text();
+                    if (text && text.length > 20) sheetData = text;
+                }
             }
         } catch (e) {}
 
         // 2. Fallback direto para o Google Sheets GViz
-        if (!csvText) {
+        if (!sheetData) {
             try {
-                const gRes = await fetch(GOOGLE_SHEET_CSV_URL, { cache: 'no-store' });
+                const gRes = await fetch(GOOGLE_SHEET_CSV_URL + '&t=' + Date.now(), { cache: 'no-store' });
                 if (gRes.ok) {
                     const text = await gRes.text();
-                    if (text && text.length > 20) csvText = text;
+                    if (text && text.length > 20) sheetData = text;
                 }
             } catch (e) {}
         }
 
         // 3. Fallback export CSV
-        if (!csvText) {
+        if (!sheetData) {
             try {
-                const gRes2 = await fetch(GOOGLE_SHEET_FALLBACK_URL, { cache: 'no-store' });
+                const gRes2 = await fetch(GOOGLE_SHEET_FALLBACK_URL + '?format=csv&t=' + Date.now(), { cache: 'no-store' });
                 if (gRes2.ok) {
                     const text = await gRes2.text();
-                    if (text && text.length > 20) csvText = text;
+                    if (text && text.length > 20) sheetData = text;
                 }
             } catch (e) {}
         }
 
-        if (csvText) {
-            const parsed = parseGoogleSheetCSV(csvText);
+        if (sheetData) {
+            const parsed = parseGoogleSheetData(sheetData);
             if (parsed && parsed.length > 0) {
                 state.allProducts = parsed;
                 extractRooms();
@@ -1549,15 +1561,20 @@ async function syncGoogleSheets(silent = false) {
             }
         }
     } catch (err) {
-        if (!silent) console.warn('Sync falhou, usando dados de cache:', err);
+        if (!silent) console.warn('Sync falhou:', err);
     }
 }
 
-function parseGoogleSheetCSV(csvText) {
-    const lines = parseCSVRows(csvText);
-    if (lines.length < 2) return null;
+function parseGoogleSheetData(input) {
+    let lines = [];
+    if (Array.isArray(input)) {
+        lines = input;
+    } else if (typeof input === 'string') {
+        lines = parseCSVRows(input);
+    }
+    if (!lines || lines.length < 2) return null;
 
-    const headers = lines[0].map(h => (h || '').trim().toLowerCase());
+    const headers = lines[0].map(h => (h || '').toString().trim().toLowerCase());
     
     const colSala = headers.findIndex(h => h.includes('sala'));
     const colProd = headers.findIndex(h => h.includes('prod') || h.includes('ref') || h.includes('item'));
@@ -1583,20 +1600,20 @@ function parseGoogleSheetCSV(csvText) {
         const row = lines[r];
         if (!row || row.length === 0) continue;
 
-        const prodCode = (colProd >= 0 && row[colProd]) ? row[colProd].trim() : '';
+        const prodCode = (colProd >= 0 && row[colProd] !== undefined && row[colProd] !== null) ? String(row[colProd]).trim() : '';
         if (!prodCode) continue;
 
-        const sala = (colSala >= 0 && row[colSala] && row[colSala].trim()) ? row[colSala].trim() : 'GERAL';
-        const descricao = (colDesc >= 0 && row[colDesc]) ? row[colDesc].trim() : '';
-        const obs = (colObs >= 0 && row[colObs]) ? row[colObs].trim() : '';
+        const sala = (colSala >= 0 && row[colSala] && String(row[colSala]).trim()) ? String(row[colSala]).trim() : 'GERAL';
+        const descricao = (colDesc >= 0 && row[colDesc] !== undefined && row[colDesc] !== null) ? String(row[colDesc]).trim() : '';
+        const obs = (colObs >= 0 && row[colObs] !== undefined && row[colObs] !== null) ? String(row[colObs]).trim() : '';
         
-        const precoStr = (colPreco >= 0 && row[colPreco]) ? row[colPreco] : '0';
+        const precoStr = (colPreco >= 0 && row[colPreco] !== undefined && row[colPreco] !== null) ? String(row[colPreco]) : '0';
         const precoNum = parseCurrency(precoStr);
 
-        const markupStr = (colMarkup >= 0 && row[colMarkup]) ? row[colMarkup].replace(',', '.') : '';
+        const markupStr = (colMarkup >= 0 && row[colMarkup] !== undefined && row[colMarkup] !== null) ? String(row[colMarkup]).replace(',', '.') : '';
         const markup = parseFloat(markupStr) || 2.5;
 
-        const pdvStr = (colPdv >= 0 && row[colPdv]) ? row[colPdv] : '';
+        const pdvStr = (colPdv >= 0 && row[colPdv] !== undefined && row[colPdv] !== null) ? String(row[colPdv]) : '';
         let pdvNum = parseCurrency(pdvStr);
         if (pdvNum === 0 && precoNum > 0) {
             pdvNum = Number((precoNum * markup).toFixed(2));
@@ -1604,8 +1621,8 @@ function parseGoogleSheetCSV(csvText) {
 
         const variacoes = [];
         varCols.forEach((vCol) => {
-            const vName = (row[vCol.nameIdx] || '').trim();
-            const vPriceStr = (row[vCol.priceIdx] || '').trim();
+            const vName = (row[vCol.nameIdx] !== undefined && row[vCol.nameIdx] !== null) ? String(row[vCol.nameIdx]).trim() : '';
+            const vPriceStr = (row[vCol.priceIdx] !== undefined && row[vCol.priceIdx] !== null) ? String(row[vCol.priceIdx]).trim() : '';
             if (vName) {
                 const vPrice = parseCurrency(vPriceStr) || precoNum;
                 variacoes.push({
@@ -1629,29 +1646,6 @@ function parseGoogleSheetCSV(csvText) {
             pdvFormatted: formatCurrency(pdvNum),
             variacoes: variacoes
         };
-
-        // Aplica overrides locais se existirem
-        try {
-            const stored = localStorage.getItem('oneda_product_overrides');
-            if (stored) {
-                const overrides = JSON.parse(stored);
-                const ov = overrides[prodCode.toUpperCase()];
-                if (ov) {
-                    if (ov.descricao !== undefined) prodItem.descricao = ov.descricao;
-                    if (ov.custoPrincipal !== undefined) {
-                        prodItem.precoPrincipal = ov.custoPrincipal;
-                        prodItem.precoPrincipalFormatted = formatCurrency(ov.custoPrincipal);
-                    }
-                    if (ov.markup !== undefined) prodItem.markup = ov.markup;
-                    if (ov.pdvSugerido !== undefined) {
-                        prodItem.pdvSugerido = ov.pdvSugerido;
-                        prodItem.pdvFormatted = formatCurrency(ov.pdvSugerido);
-                    }
-                    if (ov.obs !== undefined) prodItem.obs = ov.obs;
-                    if (ov.variacoes !== undefined) prodItem.variacoes = ov.variacoes;
-                }
-            }
-        } catch (e) {}
 
         products.push(prodItem);
     }
