@@ -350,49 +350,78 @@ function goToProductById(prodId) {
 }
 window.goToProductById = goToProductById;
 
+const COLOR_STOP_WORDS = [
+    /\bcor\s*\d+\b/i, /\bbright\s*white\b/i, /\bsea\s*foam\b/i, /\bdark\s*shadow\b/i,
+    /\bflint\b/i, /\boatmeal\b/i, /\bzephyr\b/i, /\bblack\b/i, /\boff\s*white\b/i,
+    /\bdark\s*blue\b/i, /\bdesenvolver\b/i, /\bpendente\b/i, /\btingir\b/i,
+    /\bvestir\s*assim\b/i, /\bno\s*cabide\b/i, /\bsolicitar\b/i, /\betiqueta\b/i,
+    /\bsolapa\b/i, /\bbandeira\b/i, /\btag\b/i, /\bbainha\b/i, /\bgola\b/i,
+    /\bcava\b/i, /\bc[oó]s\b/i, /\bilh[oó]s\b/i, /\bcadinho\b/i, /\bcadar[cç]o\b/i,
+    /\bfornecedor\b/i, /\bc[oó]digo\b/i, /\blote\b/i, /\b\d{2}-\d{4}\b/i,
+    /\bmc\s*\d{6,}\b/i, /\btc\s*\d{2}\/\d{4}\b/i, /\brotativo\b/i, /\bestampa\b/i,
+    /\bbolso\b/i, /\bcaixa\s*de\s*f[oó]sforo\b/i, /\bvinho\b/i
+];
+
+function isColorOrLabelLine(text) {
+    if (!text) return true;
+    return COLOR_STOP_WORDS.some(pat => pat.test(text));
+}
+
 /**
  * Extrai / Normaliza a Malha do produto a partir de metadados OCR da ficha ou descrição
  */
 function getProductMalha(prod) {
-    if (!prod) return 'Não Especificada';
+    if (!prod) return 'Meia Malha Penteada';
     const skuClean = (prod.produto || '').toUpperCase().trim();
     const baseSku = skuClean.replace(/[A-Z]+$/, '').replace(/-\d+$/, '').trim();
     const meta = fichaMetadata[skuClean] || fichaMetadata[baseSku] || {};
     let raw = (meta.malha || '').trim();
 
+    if (isColorOrLabelLine(raw)) raw = '';
+
     if (!raw && prod.obs) {
-        const mMatch = prod.obs.match(/(meia\s*malha|moletom|molecotton|cotton|ribana|viscose|favo|waffle|gorgur[aã]o|piquet|linho|malh[aã]o)/i);
+        const mMatch = prod.obs.match(/(polilinho|meia\s*malha|moletom\s*3\s*cabos|moletom|molecotton|cotton|ribana|viscose|favo|waffle|gorgur[aã]o|piquet|linho|malh[aã]o|moletinho)/i);
         if (mMatch) raw = mMatch[0];
     }
     if (!raw && prod.descricao) {
-        const mMatch2 = prod.descricao.match(/(moletom|malha|cotton|ribana|viscose|linho)/i);
+        const mMatch2 = prod.descricao.match(/(polilinho|moletom|malha|cotton|ribana|viscose|linho|moletinho|gorgur[aã]o)/i);
         if (mMatch2) raw = mMatch2[0];
     }
 
     if (!raw) return 'Meia Malha Penteada';
 
     let clean = raw.trim();
-    clean = clean.replace(/^[-\s/.:;]+|[-\s/.:;]+$/g, '');
+    clean = clean.replace(/^[-\s/.:;[\]|]+|[-\s/.:;[\]|]+$/g, '');
     clean = clean.replace(/\b1\/2\s*Malha\b/gi, 'Meia Malha');
     clean = clean.replace(/\b1\/2\b/g, 'Meia');
 
+    if (/polilinho/i.test(clean)) return 'Meia Malha Polilinho';
+    if (/meia\s*malha\s*oe/i.test(clean) || /malha\s*oe/i.test(clean)) return 'Meia Malha OE';
     if (/meia\s*malha\s*pent/i.test(clean)) return 'Meia Malha Penteada';
     if (/meia\s*malha\s*card/i.test(clean)) return 'Meia Malha Cardada';
     if (/meia\s*malha/i.test(clean)) return 'Meia Malha Penteada';
-    if (/malh[aã]o/i.test(clean)) return 'Malhão Penteado';
+    if (/malh[aã]o/i.test(clean)) return 'Malhão 180g';
     if (/molecotton\s*jeans/i.test(clean)) return 'Molecotton Jeans';
     if (/molecotton/i.test(clean)) return 'Molecotton';
-    if (/moletom.*com\s*felpa/i.test(clean) || /moletom.*c\/\s*felpa/i.test(clean)) return 'Moletom com Felpa';
-    if (/moletom.*sem\s*felpa/i.test(clean) || /moletom.*s\/\s*felpa/i.test(clean)) return 'Moletom sem Felpa';
+    if (/moletom\s*3\s*cabos/i.test(clean)) return 'Moletom 3 Cabos';
+    if (/moletom.*(com\s*felpa|c\/\s*felpa)/i.test(clean)) return 'Moletom com Felpa';
+    if (/moletom.*(sem\s*felpa|s\/\s*felpa)/i.test(clean)) return 'Moletom sem Felpa';
     if (/moletom/i.test(clean)) return 'Moletom PA';
     if (/moletinho/i.test(clean)) return 'Moletinho';
+    if (/suedine/i.test(clean)) return 'Suedine Penteado';
+    if (/atlantic\s*stripe/i.test(clean)) return 'Malha Atlantic Stripe';
+    if (/canelad[oa]/i.test(clean)) return 'Malha Canelada';
+    if (/gorgur[aã]o/i.test(clean)) return 'Gorgurão PA';
+    if (/ribana/i.test(clean)) return 'Ribana';
     if (/malha\s*favo/i.test(clean)) return 'Malha Favo';
     if (/waffle/i.test(clean)) return 'Waffle Elegance';
-    if (/gorgur[aã]o/i.test(clean)) return 'Gorgurão PA';
-    if (/ribana/i.test(clean)) return 'Ribana 2x1';
     if (/cotton/i.test(clean)) return 'Cotton com Elastano';
     if (/piquet/i.test(clean)) return 'Piquet';
-    if (/viscose/i.test(clean)) return 'Viscose';
+    if (/viscose|viscolycra/i.test(clean)) return 'Viscose';
+    if (/micro\s*touch/i.test(clean)) return 'Malha Micro Touch';
+    if (/ponto\s*light/i.test(clean)) return 'Malha Ponto Light';
+    if (/flam[eê]/i.test(clean)) return 'Malha Flamê';
+    if (/tnt\s*dry/i.test(clean)) return 'Malha TNT Dry';
 
     return clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 }
@@ -401,43 +430,49 @@ function getProductMalha(prod) {
  * Extrai / Normaliza a Modelagem do produto a partir de metadados OCR da ficha ou descrição
  */
 function getProductModelagem(prod) {
-    if (!prod) return 'Não Especificada';
+    if (!prod) return 'Top MC';
     const skuClean = (prod.produto || '').toUpperCase().trim();
     const baseSku = skuClean.replace(/[A-Z]+$/, '').replace(/-\d+$/, '').trim();
     const meta = fichaMetadata[skuClean] || fichaMetadata[baseSku] || {};
     let raw = (meta.modelagem || '').trim();
 
+    if (isColorOrLabelLine(raw)) raw = '';
+
     if (!raw && prod.descricao) {
         raw = prod.descricao.split('/')[0].trim();
     }
 
-    if (!raw) return 'Top Manga Curta';
+    if (!raw) return 'Top MC';
 
     let clean = raw.trim();
-    clean = clean.replace(/^[-\s/.:;\[\]|]+|[-\s/.:;\[\]|]+$/g, '');
+    clean = clean.replace(/^[-\s/.:;[\]|]+|[-\s/.:;[\]|]+$/g, '');
     clean = clean.replace(/^(Alteração|Alteracao|Modelo|Ref|Item)[:\s]*/i, '');
     clean = clean.replace(/(Estilo|Data|C&A|C&amp;A).*$/i, '').trim();
 
-    if (/mach[aã]o/i.test(clean)) return 'Top Machão Box';
+    if (/mach[aã]o\s*box|mach[aã]o/i.test(clean)) return 'Top Machão Box';
+    if (/top\s*mc\s*d\.?\s*200/i.test(clean)) return 'Top MC D.200';
     if (/top\s*mc\s*oversized/i.test(clean)) return 'Top MC Oversized';
-    if (/top\s*curto/i.test(clean) || /top\s*mc/i.test(clean)) return 'Top Manga Curta (MC)';
-    if (/top\s*longo/i.test(clean) || /top\s*ml/i.test(clean)) return 'Top Manga Longa (ML)';
-    if (/conj.*blus[aã]o/i.test(clean) || /conj.*moletom/i.test(clean)) return 'Conjunto Moletom';
+    if (/top\s*mc\s*regular/i.test(clean)) return 'Top MC Regular';
+    if (/top\s*(mc|curto)/i.test(clean) || /baby\s*look|camiseta/i.test(clean) || /top\s+.*mc/i.test(clean)) return 'Top MC';
+    if (/top\s*(ml|longo)/i.test(clean) || /blusa\s+ml|frufru/i.test(clean) || /top\s+.*ml/i.test(clean)) return 'Top ML';
+    if (/blus[aã]o\s*ml|blus[aã]o/i.test(clean)) return 'Blusão ML';
+    if (/conj.*(top\s*mc|curto).*short/i.test(clean) || /conj.*curto/i.test(clean)) return 'Conj. Top MC + Shorts';
+    if (/conj.*blus[aã]o.*cal[cç]a|conj.*moletom/i.test(clean)) return 'Conjunto Moletom';
     if (/conj.*polo/i.test(clean)) return 'Conjunto Polo';
-    if (/conj.*curto/i.test(clean) || /conj.*top\s*mc/i.test(clean)) return 'Conjunto Curto';
     if (/conj.*longo/i.test(clean)) return 'Conjunto Longo';
-    if (/shorts\s*saia/i.test(clean)) return 'Shorts Saia';
-    if (/shorts/i.test(clean)) return 'Shorts';
-    if (/jardineira/i.test(clean)) return 'Jardineira';
+    if (/cal[cç]a\s*jogger\s*saruel/i.test(clean)) return 'Calça Jogger Saruel';
     if (/cal[cç]a\s*jogger/i.test(clean)) return 'Calça Jogger';
     if (/cal[cç]a\s*clochard/i.test(clean)) return 'Calça Clochard';
     if (/cal[cç]a/i.test(clean)) return 'Calça';
-    if (/body\s*curto/i.test(clean)) return 'Body Curto';
-    if (/body/i.test(clean)) return 'Body';
+    if (/kit\s*regata|regata/i.test(clean)) return 'Kit Regata';
+    if (/shorts\s*saia/i.test(clean)) return 'Shorts Saia';
+    if (/shorts?|bermuda/i.test(clean)) return 'Shorts';
+    if (/jardineira/i.test(clean)) return 'Jardineira';
+    if (/body\s*curto|body\s*mc/i.test(clean)) return 'Body Curto';
+    if (/body\s*longo|body\s*ml/i.test(clean)) return 'Body Longo';
     if (/macaquinho/i.test(clean)) return 'Macaquinho';
     if (/vestido/i.test(clean)) return 'Vestido';
-    if (/regata/i.test(clean)) return 'Regata';
-    if (/polo/i.test(clean)) return 'Camisa Polo';
+    if (/camisa\s*polo|polo/i.test(clean)) return 'Camisa Polo';
 
     return clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 }
